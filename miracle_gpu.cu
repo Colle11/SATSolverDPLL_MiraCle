@@ -114,60 +114,6 @@ static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided);
 
 
 /**
- * @brief Weighs the literals in unresolved clauses according to the JW weight
- * function on the device (to be called before JW_TS_weigh_vars_unres_clauses).
- * 
- * @param [in]d_mrc A device miracle.
- * @retval None.
- */
-static void JW_weigh_lits_unres_clauses(Miracle *d_mrc);
-
-
-/**
- * @brief Weighs the variables in unresolved clauses according to the JW-TS
- * weight function on the device (to be called after
- * JW_weigh_lits_unres_clauses).
- * 
- * @param [in]d_mrc A device miracle.
- * @retval None.
- */
-static void JW_TS_weigh_vars_unres_clauses(Miracle *d_mrc);
-
-
-/**
- * @brief Computes the clause sizes on the device.
- * 
- * @param [in]d_mrc A device miracle.
- * @retval None.
- */
-static void compute_clause_sizes(Miracle *d_mrc);
-
-
-/**
- * @brief Counts the number of occurrences of literals in the smallest
- * unresolved clauses on the device.
- * 
- * @param [in]d_mrc A device miracle.
- * @param [in]smallest_c_size The smallest clause size.
- * @retval None.
- */
-static void count_lits_smallest_unres_clauses(Miracle *d_mrc,
-                                              int smallest_c_size);
-
-
-/**
- * @brief Weighs the variables in the smallest unresolved clauses according to
- * the POSIT weight function on the device.
- * 
- * @param [in]d_mrc A device miracle.
- * @param [in]n A constant of the POSIT weight function.
- * @retval None.
- */
-static void POSIT_weigh_vars_smallest_unres_clauses(Miracle *d_mrc,
-                                                    const int n);
-
-
-/**
  * @brief If dlcs = true, computes the DLCS heuristic on the device,
  * otherwise computes the DLIS heuristic on the device.
  * 
@@ -176,26 +122,6 @@ static void POSIT_weigh_vars_smallest_unres_clauses(Miracle *d_mrc,
  * @retval The branching literal.
  */
 static Lit DLxS_heuristic(Miracle *d_mrc, bool dlcs);
-
-
-/**
- * @brief Counts the number of occurrences of literals in unresolved clauses on
- * the device (to be called before count_vars_unres_clauses).
- * 
- * @param [in]d_mrc A device miracle.
- * @retval None.
- */
-static void count_lits_unres_clauses(Miracle *d_mrc);
-
-
-/**
- * @brief Counts the number of occurrences of variables in unresolved clauses
- * on the device (to be called after count_lits_unres_clauses).
- * 
- * @param [in]d_mrc A device miracle.
- * @retval None.
- */
-static void count_vars_unres_clauses(Miracle *d_mrc);
 
 
 /**
@@ -537,32 +463,67 @@ Lit mrc_gpu_JW_TS_heuristic(Miracle *d_mrc) {
 
 
 Lit mrc_gpu_POSIT_heuristic(Miracle *d_mrc, const int n) {
-    compute_clause_sizes(d_mrc);
-
-    // Smallest clause size.
+    // Clear d_clause_sizes.
     int *dev_clause_sizes;
     gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes, d_clause_sizes,
                                     sizeof dev_clause_sizes, 0UL,
                                     cudaMemcpyDeviceToHost) );
+    gpuErrchk( cuda_memset_int(dev_clause_sizes, INT_MAX, clause_sizes_len) );
+
+    int num_blks = gpu_num_blocks(clause_sizes_len);
+    int num_thds_per_blk = gpu_num_threads_per_block();
+
+    compute_clause_sizes_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
+
+    gpuErrchk( cudaPeekAtLastError() );
+
+    // Smallest clause size.
     int smallest_c_size = find_min_int(dev_clause_sizes, clause_sizes_len);
 
-    count_lits_smallest_unres_clauses(d_mrc, smallest_c_size);
+    // Clear d_lit_occ.
+    int *dev_lit_occ;
+    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
+                                    sizeof dev_lit_occ, 0UL,
+                                    cudaMemcpyDeviceToHost) );
+    gpuErrchk( cudaMemset(dev_lit_occ, 0,
+                          sizeof *dev_lit_occ * lit_occ_len) );
 
-    POSIT_weigh_vars_smallest_unres_clauses(d_mrc, n);
+    int clause_sat_len;
+    gpuErrchk( cudaMemcpy(&clause_sat_len, &(d_mrc->clause_sat_len),
+                          sizeof clause_sat_len,
+                          cudaMemcpyDeviceToHost) );
 
+    num_blks = gpu_num_blocks(clause_sat_len);
+    num_thds_per_blk = gpu_num_threads_per_block();
+
+    count_lits_smallest_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(
+                                                                d_mrc,
+                                                                smallest_c_size
+                                                                         );
+
+    gpuErrchk( cudaPeekAtLastError() );
+
+    // Clear d_var_weights.
     float *dev_var_weights;
     gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
                                     sizeof dev_var_weights, 0UL,
                                     cudaMemcpyDeviceToHost) );
+    gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
+
+    num_blks = gpu_num_blocks(var_weights_len);
+    num_thds_per_blk = gpu_num_threads_per_block();
+
+    POSIT_weigh_vars_smallest_unres_clauses_krn<<<num_blks,
+                                                  num_thds_per_blk>>>(d_mrc,
+                                                                      n);
+
+    gpuErrchk( cudaPeekAtLastError() );
+
     Var bvar = (Var)find_idx_max_float(dev_var_weights, var_weights_len);
     Lidx pos_lidx = varpol_to_lidx(bvar, true);
     Lidx neg_lidx = varpol_to_lidx(bvar, false);
     int lo_min_pos_lidx;
     int lo_min_neg_lidx;
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemcpy(&lo_min_pos_lidx, &(dev_lit_occ[pos_lidx]),
                           sizeof lo_min_pos_lidx,
                           cudaMemcpyDeviceToHost) );
@@ -717,22 +678,44 @@ static void destroy_aux_data_structs() {
 
 
 static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided) {
-    JW_weigh_lits_unres_clauses(d_mrc);
-
+    // Clear d_lit_weights.
     float *dev_lit_weights;
     gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_weights, d_lit_weights,
                                     sizeof dev_lit_weights, 0UL,
                                     cudaMemcpyDeviceToHost) );
+    gpuErrchk( cudaMemset(dev_lit_weights, 0,
+                          sizeof *dev_lit_weights * lit_weights_len) );
+
+    int clause_sat_len;
+    gpuErrchk( cudaMemcpy(&clause_sat_len, &(d_mrc->clause_sat_len),
+                          sizeof clause_sat_len,
+                          cudaMemcpyDeviceToHost) );
+
+    int num_blks = gpu_num_blocks(clause_sat_len);
+    int num_thds_per_blk = gpu_num_threads_per_block();
+
+    JW_weigh_lits_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
+
+    gpuErrchk( cudaPeekAtLastError() );
 
     Lidx blidx;     // JW_xS branching literal index.
 
     if (two_sided) {
-        JW_TS_weigh_vars_unres_clauses(d_mrc);
-
+        // Clear d_var_weights.
         float *dev_var_weights;
         gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
                                         sizeof dev_var_weights, 0UL,
                                         cudaMemcpyDeviceToHost) );
+        gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
+
+        int num_blks = gpu_num_blocks(var_weights_len);
+        int num_thds_per_blk = gpu_num_threads_per_block();
+
+        JW_TS_weigh_vars_unres_clauses_krn<<<num_blks,
+                                             num_thds_per_blk>>>(d_mrc);
+
+        gpuErrchk( cudaPeekAtLastError() );
+
         Var bvar = (Var)find_idx_max_float(dev_var_weights, var_weights_len);
         Lidx pos_lidx = varpol_to_lidx(bvar, true);
         Lidx neg_lidx = varpol_to_lidx(bvar, false);
@@ -754,149 +737,7 @@ static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided) {
 }
 
 
-static void JW_weigh_lits_unres_clauses(Miracle *d_mrc) {
-    // Clear d_lit_weights.
-    float *dev_lit_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_weights, d_lit_weights,
-                                    sizeof dev_lit_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cudaMemset(dev_lit_weights, 0,
-                          sizeof *dev_lit_weights * lit_weights_len) );
-
-    int clause_sat_len;
-    gpuErrchk( cudaMemcpy(&clause_sat_len, &(d_mrc->clause_sat_len),
-                          sizeof clause_sat_len,
-                          cudaMemcpyDeviceToHost) );
-
-    int num_blks = gpu_num_blocks(clause_sat_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
-
-    JW_weigh_lits_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
-
-    gpuErrchk( cudaPeekAtLastError() );
-}
-
-
-static void JW_TS_weigh_vars_unres_clauses(Miracle *d_mrc) {
-    // Clear d_var_weights.
-    float *dev_var_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                    sizeof dev_var_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
-
-    int num_blks = gpu_num_blocks(var_weights_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
-
-    JW_TS_weigh_vars_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
-
-    gpuErrchk( cudaPeekAtLastError() );
-}
-
-
-static void compute_clause_sizes(Miracle *d_mrc) {
-    // Clear d_clause_sizes.
-    int *dev_clause_sizes;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes, d_clause_sizes,
-                                    sizeof dev_clause_sizes, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cuda_memset_int(dev_clause_sizes, INT_MAX, clause_sizes_len) );
-
-    int num_blks = gpu_num_blocks(clause_sizes_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
-
-    compute_clause_sizes_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
-
-    gpuErrchk( cudaPeekAtLastError() );
-}
-
-
-static void count_lits_smallest_unres_clauses(Miracle *d_mrc,
-                                              int smallest_c_size) {
-    // Clear d_lit_occ.
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cudaMemset(dev_lit_occ, 0,
-                          sizeof *dev_lit_occ * lit_occ_len) );
-
-    int clause_sat_len;
-    gpuErrchk( cudaMemcpy(&clause_sat_len, &(d_mrc->clause_sat_len),
-                          sizeof clause_sat_len,
-                          cudaMemcpyDeviceToHost) );
-
-    int num_blks = gpu_num_blocks(clause_sat_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
-
-    count_lits_smallest_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(
-                                                                d_mrc,
-                                                                smallest_c_size
-                                                                         );
-
-    gpuErrchk( cudaPeekAtLastError() );
-}
-
-
-static void POSIT_weigh_vars_smallest_unres_clauses(Miracle *d_mrc,
-                                                    const int n) {
-    // Clear d_var_weights.
-    float *dev_var_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                    sizeof dev_var_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
-
-    int num_blks = gpu_num_blocks(var_weights_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
-
-    POSIT_weigh_vars_smallest_unres_clauses_krn<<<num_blks,
-                                                  num_thds_per_blk>>>(d_mrc,
-                                                                      n);
-
-    gpuErrchk( cudaPeekAtLastError() );
-}
-
-
 static Lit DLxS_heuristic(Miracle *d_mrc, bool dlcs) {
-    count_lits_unres_clauses(d_mrc);
-
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-
-    Lidx blidx;     // DLxS branching literal index.
-
-    if (dlcs) {
-        count_vars_unres_clauses(d_mrc);
-
-        int *dev_var_occ;
-        gpuErrchk( cudaMemcpyFromSymbol(&dev_var_occ, d_var_occ,
-                                        sizeof dev_var_occ, 0UL,
-                                        cudaMemcpyDeviceToHost) );
-        Var bvar = (Var)find_idx_max_int(dev_var_occ, var_occ_len);
-        Lidx pos_lidx = varpol_to_lidx(bvar, true);
-        Lidx neg_lidx = varpol_to_lidx(bvar, false);
-        int lo_pos_lidx;
-        int lo_neg_lidx;
-        gpuErrchk( cudaMemcpy(&lo_pos_lidx, &(dev_lit_occ[pos_lidx]),
-                              sizeof lo_pos_lidx,
-                              cudaMemcpyDeviceToHost) );
-        gpuErrchk( cudaMemcpy(&lo_neg_lidx, &(dev_lit_occ[neg_lidx]),
-                              sizeof lo_neg_lidx,
-                              cudaMemcpyDeviceToHost) );
-
-        blidx = lo_pos_lidx >= lo_neg_lidx ? pos_lidx : neg_lidx;
-    } else {
-        blidx = (Lidx)find_idx_max_int(dev_lit_occ, lit_occ_len);
-    }
-
-    return lidx_to_lit(blidx);
-}
-
-
-static void count_lits_unres_clauses(Miracle *d_mrc) {
     // Clear d_lit_occ.
     int *dev_lit_occ;
     gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
@@ -916,23 +757,42 @@ static void count_lits_unres_clauses(Miracle *d_mrc) {
     count_lits_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
 
     gpuErrchk( cudaPeekAtLastError() );
-}
 
+    Lidx blidx;     // DLxS branching literal index.
 
-static void count_vars_unres_clauses(Miracle *d_mrc) {
-    // Clear d_var_occ.
-    int *dev_var_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_occ, d_var_occ,
-                                    sizeof dev_var_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    gpuErrchk( cuda_memset_int(dev_var_occ, -1, var_occ_len) );
+    if (dlcs) {
+        // Clear d_var_occ.
+        int *dev_var_occ;
+        gpuErrchk( cudaMemcpyFromSymbol(&dev_var_occ, d_var_occ,
+                                        sizeof dev_var_occ, 0UL,
+                                        cudaMemcpyDeviceToHost) );
+        gpuErrchk( cuda_memset_int(dev_var_occ, -1, var_occ_len) );
 
-    int num_blks = gpu_num_blocks(var_occ_len);
-    int num_thds_per_blk = gpu_num_threads_per_block();
+        int num_blks = gpu_num_blocks(var_occ_len);
+        int num_thds_per_blk = gpu_num_threads_per_block();
 
-    count_vars_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
+        count_vars_unres_clauses_krn<<<num_blks, num_thds_per_blk>>>(d_mrc);
 
-    gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk( cudaPeekAtLastError() );
+
+        Var bvar = (Var)find_idx_max_int(dev_var_occ, var_occ_len);
+        Lidx pos_lidx = varpol_to_lidx(bvar, true);
+        Lidx neg_lidx = varpol_to_lidx(bvar, false);
+        int lo_pos_lidx;
+        int lo_neg_lidx;
+        gpuErrchk( cudaMemcpy(&lo_pos_lidx, &(dev_lit_occ[pos_lidx]),
+                              sizeof lo_pos_lidx,
+                              cudaMemcpyDeviceToHost) );
+        gpuErrchk( cudaMemcpy(&lo_neg_lidx, &(dev_lit_occ[neg_lidx]),
+                              sizeof lo_neg_lidx,
+                              cudaMemcpyDeviceToHost) );
+
+        blidx = lo_pos_lidx >= lo_neg_lidx ? pos_lidx : neg_lidx;
+    } else {
+        blidx = (Lidx)find_idx_max_int(dev_lit_occ, lit_occ_len);
+    }
+
+    return lidx_to_lit(blidx);
 }
 
 
