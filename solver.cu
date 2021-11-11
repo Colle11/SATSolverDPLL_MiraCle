@@ -20,12 +20,12 @@
 #define NUM_ARGS (1)    // Number of solver arguments.
 #define POSIT_n (3)     // Constant of the POSIT weight function.
 
-#define NO_MRC
+// #define NO_MRC
 // #define MRC
 // #define MRC_DYN
 // #define MRC_GPU
 
-#define JW_OS
+// #define JW_OS
 // #define JW_TS
 // #define POSIT
 // #define DLIS
@@ -35,9 +35,6 @@
 
 using namespace std;
 
-/**
- * Global variables
- */
 #ifdef MRC
 static Lit *lits;       // Array of assigned literals.
 static int lits_len;    // Length of lits, which is the number of assigned literals.
@@ -112,34 +109,34 @@ private:
   int unit_propagate(Formula &); // performs unit propagation
 #endif
 #ifdef MRC
-  int unit_propagate(Formula &, Miracle *mrc);
+  int unit_propagate(Formula &, Miracle *mrc, Lit blit);
 #endif
 #ifdef MRC_DYN
-  int unit_propagate(Formula &, Miracle_Dyn *mrc_dyn);
+  int unit_propagate(Formula &, Miracle_Dyn *mrc_dyn, Lit blit);
 #endif
 #ifdef MRC_GPU
-  int unit_propagate(Formula &, Miracle *d_mrc);
+  int unit_propagate(Formula &, Miracle *d_mrc, Lit blit);
 #endif
 #ifdef NO_MRC
-  int DPLL(Formula);                          // performs DPLL recursively
+  int DPLL(Formula);             // performs DPLL recursively
 #endif
 #ifdef MRC
-  int DPLL(Formula, Miracle *mrc);
+  int DPLL(Formula, Miracle *mrc, Lit blit);
 #endif
 #ifdef MRC_DYN
-  int DPLL(Formula, Miracle_Dyn *mrc_dyn);
+  int DPLL(Formula, Miracle_Dyn *mrc_dyn, Lit blit);
 #endif
 #ifdef MRC_GPU
-  int DPLL(Formula, Miracle *d_mrc);
+  int DPLL(Formula, Miracle *d_mrc, Lit blit);
 #endif
   int apply_transform(Formula &,
                       int); // applies the value of the literal in every clause
   void show_result(Formula &, int); // displays the result
 public:
   SATSolverDPLL() {}
-  void initialize(char *filename); // intiializes the values
+  void initialize(char *filename); // initializes the values
 #ifdef NO_MRC
-  void solve();                       // calls the solver
+  void solve();      // calls the solver
 #endif
 #ifdef MRC
   void solve(Miracle *mrc);
@@ -149,6 +146,9 @@ public:
 #endif
 #ifdef MRC_GPU
   void solve(Miracle *d_mrc);
+#endif
+#ifdef MRC_DYN
+  void print_debug_info(Formula &f, Miracle_Dyn *mrc_dyn);
 #endif
 };
 
@@ -243,19 +243,40 @@ void SATSolverDPLL::initialize(char *filename) {
 int SATSolverDPLL::unit_propagate(Formula &f) {
 #endif
 #ifdef MRC
-int SATSolverDPLL::unit_propagate(Formula &f, Miracle *mrc) {
+int SATSolverDPLL::unit_propagate(Formula &f, Miracle *mrc, Lit blit) {
   Lidx lidx;
   lits_len = 0;
+
+  if (blit != 0)
+  {
+    lits[lits_len] = blit;
+    lits_len++;
+    mrc_increase_decision_level(mrc);
+  }
 #endif
 #ifdef MRC_DYN
-int SATSolverDPLL::unit_propagate(Formula &f, Miracle_Dyn *mrc_dyn) {
+int SATSolverDPLL::unit_propagate(Formula &f, Miracle_Dyn *mrc_dyn, Lit blit) {
   Lidx lidx;
   lits_len = 0;
+
+  if (blit != 0)
+  {
+    lits[lits_len] = blit;
+    lits_len++;
+    mrc_dyn_increase_decision_level(mrc_dyn);
+  }
 #endif
 #ifdef MRC_GPU
-int SATSolverDPLL::unit_propagate(Formula &f, Miracle *d_mrc) {
+int SATSolverDPLL::unit_propagate(Formula &f, Miracle *d_mrc, Lit blit) {
   Lidx lidx;
   lits_len = 0;
+
+  if (blit != 0)
+  {
+    lits[lits_len] = blit;
+    lits_len++;
+    mrc_gpu_increase_decision_level(d_mrc);
+  }
 #endif
   bool unit_clause_found =
       false; // stores whether the current iteration found a unit clause
@@ -389,50 +410,53 @@ int SATSolverDPLL::DPLL(Formula f) {
   int result = unit_propagate(f); // perform unit propagation on the formula
 #endif
 #ifdef MRC
-int SATSolverDPLL::DPLL(Formula f, Miracle *mrc) {
+int SATSolverDPLL::DPLL(Formula f, Miracle *mrc, Lit blit) {
   int dec_lvl = mrc->dec_lvl;
+  Lit bl;
+  Var bv;
+  bool pol;
+  int i;
 
-  int result = unit_propagate(f, mrc); // perform unit propagation on the formula
+  int result = unit_propagate(f, mrc, blit);
 #endif
 #ifdef MRC_DYN
-int SATSolverDPLL::DPLL(Formula f, Miracle_Dyn *mrc_dyn) {
+int SATSolverDPLL::DPLL(Formula f, Miracle_Dyn *mrc_dyn, Lit blit) {
   int dec_lvl = mrc_dyn->dec_lvl;
+  Lit bl;
+  Var bv;
+  bool pol;
+  int i;
 
-  int result = unit_propagate(f, mrc_dyn); // perform unit propagation on the formula
+  int result = unit_propagate(f, mrc_dyn, blit);
 #endif
 #ifdef MRC_GPU
-int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc) {
+int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   int dec_lvl;
   gpuErrchk( cudaMemcpy(&dec_lvl, &(d_mrc->dec_lvl),
                         sizeof dec_lvl,
                         cudaMemcpyDeviceToHost) );
+  Lit bl;
+  Var bv;
+  bool pol;
+  int i;
 
-  int result = unit_propagate(f, d_mrc); // perform unit propagation on the formula
+  int result = unit_propagate(f, d_mrc, blit);
 #endif
   if (result == Cat::satisfied) // if formula satisfied, show result and return
   {
     show_result(f, result);
-#ifdef MRC
-  mrc_backjump(dec_lvl - 1, mrc);
-#endif
-#ifdef MRC_DYN
-  mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
-#endif
-#ifdef MRC_GPU
-  mrc_gpu_backjump(dec_lvl - 1, d_mrc);
-#endif
     return Cat::completed;
   } else if (result == Cat::unsatisfied) // if formula not satisfied in this
                                          // branch, return normally
   {
 #ifdef MRC
-    mrc_backjump(dec_lvl - 1, mrc);
+    mrc_backjump(dec_lvl, mrc);
 #endif
 #ifdef MRC_DYN
-    mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
+    mrc_dyn_backjump(dec_lvl, mrc_dyn);
 #endif
 #ifdef MRC_GPU
-    mrc_gpu_backjump(dec_lvl - 1, d_mrc);
+    mrc_gpu_backjump(dec_lvl, d_mrc);
 #endif
     return Cat::normal;
   }
@@ -446,84 +470,84 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc) {
 #endif
 #ifdef MRC
   #ifdef JW_OS
-  Lit blit = mrc_JW_OS_heuristic(mrc);
+  bl = mrc_JW_OS_heuristic(mrc);
   #endif
   #ifdef JW_TS
-  Lit blit = mrc_JW_TS_heuristic(mrc);
+  bl = mrc_JW_TS_heuristic(mrc);
   #endif
   #ifdef POSIT
-  Lit blit = mrc_POSIT_heuristic(mrc, POSIT_n);
+  bl = mrc_POSIT_heuristic(mrc, POSIT_n);
   #endif
   #ifdef DLIS
-  Lit blit = mrc_DLIS_heuristic(mrc);
+  bl = mrc_DLIS_heuristic(mrc);
   #endif
   #ifdef DLCS
-  Lit blit = mrc_DLCS_heuristic(mrc);
+  bl = mrc_DLCS_heuristic(mrc);
   #endif
   #ifdef RDLIS
-  Lit blit = mrc_RDLIS_heuristic(mrc);
+  bl = mrc_RDLIS_heuristic(mrc);
   #endif
   #ifdef RDLCS
-  Lit blit = mrc_RDLCS_heuristic(mrc);
+  bl = mrc_RDLCS_heuristic(mrc);
   #endif
 
-  Var bvar = lit_to_var(blit);
-  bool pol = lit_to_pol(blit);
-  int i = (int)bvar;
+  bv = lit_to_var(bl);
+  pol = lit_to_pol(bl);
+  i = (int)bv;
 #endif
 #ifdef MRC_DYN
   #ifdef JW_OS
-  Lit blit = mrc_dyn_JW_OS_heuristic(mrc_dyn);
+  bl = mrc_dyn_JW_OS_heuristic(mrc_dyn);
   #endif
   #ifdef JW_TS
-  Lit blit = mrc_dyn_JW_TS_heuristic(mrc_dyn);
+  bl = mrc_dyn_JW_TS_heuristic(mrc_dyn);
   #endif
   #ifdef POSIT
-  Lit blit = mrc_dyn_POSIT_heuristic(mrc_dyn, POSIT_n);
+  bl = mrc_dyn_POSIT_heuristic(mrc_dyn, POSIT_n);
   #endif
   #ifdef DLIS
-  Lit blit = mrc_dyn_DLIS_heuristic(mrc_dyn);
+  bl = mrc_dyn_DLIS_heuristic(mrc_dyn);
   #endif
   #ifdef DLCS
-  Lit blit = mrc_dyn_DLCS_heuristic(mrc_dyn);
+  bl = mrc_dyn_DLCS_heuristic(mrc_dyn);
   #endif
   #ifdef RDLIS
-  Lit blit = mrc_dyn_RDLIS_heuristic(mrc_dyn);
+  bl = mrc_dyn_RDLIS_heuristic(mrc_dyn);
   #endif
   #ifdef RDLCS
-  Lit blit = mrc_dyn_RDLCS_heuristic(mrc_dyn);
+  bl = mrc_dyn_RDLCS_heuristic(mrc_dyn);
   #endif
 
-  Var bvar = lit_to_var(blit);
-  bool pol = lit_to_pol(blit);
-  int i = (int)bvar;
+  bv = lit_to_var(bl);
+  pol = lit_to_pol(bl);
+  i = (int)bv;
 #endif
 #ifdef MRC_GPU
   #ifdef JW_OS
-  Lit blit = mrc_gpu_JW_OS_heuristic(d_mrc);
+  bl = mrc_gpu_JW_OS_heuristic(d_mrc);
   #endif
   #ifdef JW_TS
-  Lit blit = mrc_gpu_JW_TS_heuristic(d_mrc);
+  bl = mrc_gpu_JW_TS_heuristic(d_mrc);
   #endif
   #ifdef POSIT
-  Lit blit = mrc_gpu_POSIT_heuristic(d_mrc, POSIT_n);
+  bl = mrc_gpu_POSIT_heuristic(d_mrc, POSIT_n);
   #endif
   #ifdef DLIS
-  Lit blit = mrc_gpu_DLIS_heuristic(d_mrc);
+  bl = mrc_gpu_DLIS_heuristic(d_mrc);
   #endif
   #ifdef DLCS
-  Lit blit = mrc_gpu_DLCS_heuristic(d_mrc);
+  bl = mrc_gpu_DLCS_heuristic(d_mrc);
   #endif
   #ifdef RDLIS
-  Lit blit = mrc_gpu_RDLIS_heuristic(d_mrc);
+  bl = mrc_gpu_RDLIS_heuristic(d_mrc);
   #endif
   #ifdef RDLCS
-  Lit blit = mrc_gpu_RDLCS_heuristic(d_mrc);
+  bl = mrc_gpu_RDLCS_heuristic(d_mrc);
   #endif
 
-  Var bvar = lit_to_var(blit);
-  bool pol = lit_to_pol(blit);
-  int i = (int)bvar;
+  bv = lit_to_var(bl);
+  pol = lit_to_pol(bl);
+  i = (int)bv;
 #endif
   // need to apply twice, once true, the other false
   for (int j = 0; j < 2; j++) {
@@ -552,34 +576,22 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc) {
         -1; // reset the frequency to -1 to ignore in the future
 #endif
 #ifdef MRC
-    mrc_increase_decision_level(mrc);
-
     if (j == 1)
     {
-      blit = neg_lit(blit);
+      bl = neg_lit(bl);
     }
-
-    mrc_assign_lits(&blit, 1, mrc);
 #endif
 #ifdef MRC_DYN
-    mrc_dyn_increase_decision_level(mrc_dyn);
-
     if (j == 1)
     {
-      blit = neg_lit(blit);
+      bl = neg_lit(bl);
     }
-
-    mrc_dyn_assign_lits(&blit, 1, mrc_dyn);
 #endif
 #ifdef MRC_GPU
-    mrc_gpu_increase_decision_level(d_mrc);
-
     if (j == 1)
     {
-      blit = neg_lit(blit);
+      bl = neg_lit(bl);
     }
-
-    mrc_gpu_assign_lits(&blit, 1, d_mrc);
 #endif
     int transform_result =
         apply_transform(new_f, i); // apply the change to all the clauses
@@ -587,65 +599,38 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc) {
         Cat::satisfied) // if formula satisfied, show result and return
     {
       show_result(new_f, transform_result);
-#ifdef MRC
-      mrc_backjump(dec_lvl - 1, mrc);
-#endif
-#ifdef MRC_DYN
-      mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
-#endif
-#ifdef MRC_GPU
-      mrc_gpu_backjump(dec_lvl - 1, d_mrc);
-#endif
       return Cat::completed;
     } else if (transform_result == Cat::unsatisfied) // if formula not satisfied
                                                      // in this branch, return
                                                      // normally
     {
-#ifdef MRC
-      mrc_backjump(dec_lvl - 1, mrc);
-#endif
-#ifdef MRC_DYN
-      mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
-#endif
-#ifdef MRC_GPU
-      mrc_gpu_backjump(dec_lvl - 1, d_mrc);
-#endif
       continue;
     }
 #ifdef NO_MRC
     int dpll_result = DPLL(new_f); // recursively call DPLL on the new formula
 #endif
 #ifdef MRC
-    int dpll_result = DPLL(new_f, mrc);
+    int dpll_result = DPLL(new_f, mrc, bl);
 #endif
 #ifdef MRC_DYN
-    int dpll_result = DPLL(new_f, mrc_dyn);
+    int dpll_result = DPLL(new_f, mrc_dyn, bl);
 #endif
 #ifdef MRC_GPU
-    int dpll_result = DPLL(new_f, d_mrc);
+    int dpll_result = DPLL(new_f, d_mrc, bl);
 #endif
     if (dpll_result == Cat::completed) // propagate the result, if completed
     {
-#ifdef MRC
-      mrc_backjump(dec_lvl - 1, mrc);
-#endif
-#ifdef MRC_DYN
-      mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
-#endif
-#ifdef MRC_GPU
-      mrc_gpu_backjump(dec_lvl - 1, d_mrc);
-#endif
       return dpll_result;
     }
   }
 #ifdef MRC
-  mrc_backjump(dec_lvl - 1, mrc);
+  mrc_backjump(dec_lvl, mrc);
 #endif
 #ifdef MRC_DYN
-  mrc_dyn_backjump(dec_lvl - 1, mrc_dyn);
+  mrc_dyn_backjump(dec_lvl, mrc_dyn);
 #endif
 #ifdef MRC_GPU
-  mrc_gpu_backjump(dec_lvl - 1, d_mrc);
+  mrc_gpu_backjump(dec_lvl, d_mrc);
 #endif
   // if the control reaches here, the function has returned normally
   return Cat::normal;
@@ -690,21 +675,118 @@ void SATSolverDPLL::solve() {
 #endif
 #ifdef MRC
 void SATSolverDPLL::solve(Miracle *mrc) {
-  int result = DPLL(formula, mrc);
+  int result = DPLL(formula, mrc, 0);
 #endif
 #ifdef MRC_DYN
 void SATSolverDPLL::solve(Miracle_Dyn *mrc_dyn) {
-  int result = DPLL(formula, mrc_dyn);
+  int result = DPLL(formula, mrc_dyn, 0);
 #endif
 #ifdef MRC_GPU
 void SATSolverDPLL::solve(Miracle *d_mrc) {
-  int result = DPLL(formula, d_mrc);
+  int result = DPLL(formula, d_mrc, 0);
 #endif
   if (result == Cat::normal) {
     show_result(formula, Cat::unsatisfied); // the argument formula is a dummy
                                             // here, the result is UNSAT
   }
 }
+
+#ifdef MRC_DYN
+/*
+ * function to print debugging information about the formula and the miracle
+ */
+void SATSolverDPLL::print_debug_info(Formula &f, Miracle_Dyn *mrc_dyn) {
+  printf("******************************************************************");
+  printf("\n");
+  printf("**********************    DEBUG INFO    **************************");
+  printf("\n");
+  printf("******************************************************************");
+  printf("\n\n");
+
+  mrc_dyn_print_miracle(mrc_dyn);
+
+  printf("******************************************************************");
+  printf("\n\n");
+
+  printf("*** SATSolverDPLL ***\n\n");
+
+  printf("Literals: ");
+  for (int l = 0; l < f.literals.size(); l++) {
+    printf("[%d]%d ", l, f.literals[l]);
+  }
+  printf("\n");
+
+  printf("Number of unresolved clauses: %d\n", f.clauses.size());
+
+  printf("Clauses: ");
+  for (int c = 0; c < f.clauses.size(); c++) {
+    printf("(");
+    for (int l = 0; l < f.clauses[c].size(); l++) {
+      printf("%d ", f.clauses[c][l]);
+    }
+    printf(") ");
+  }
+  printf("\n");
+
+  printf("Clause sizes: ");
+  for (int c = 0; c < f.clauses.size(); c++) {
+    printf("%d ", f.clauses[c].size());
+  }
+  printf("\n");
+
+  printf("\n*** End SATSolverDPLL ***\n\n");
+
+  printf("******************************************************************");
+  printf("\n\n");
+
+  printf("*** Correctness test ***\n\n");
+
+  printf("*** Variable assignments test ***\n\n");
+
+  int v_ass;
+  int v_ass_conv;
+  for (int v = 0; v < f.literals.size(); v++) {
+    v_ass = mrc_dyn->var_ass[v];
+    v_ass_conv = v_ass == 0 ? -1 : (v_ass > 0 ? 0 : 1);
+
+    if (v_ass_conv != f.literals[v]) {
+      printf("mrc_dyn->var_ass_conv[%d] = %d    !=    f.literals[%d] = %d\n", v, v_ass_conv, v, f.literals[v]);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  printf("OK!\n");
+  
+  printf("\n*** End variable assignments test ***\n\n");
+
+  printf("*** Clause sizes test ***\n\n");
+
+  int i = 0;
+  for (int c = 0; c < mrc_dyn->clause_sat_len; c++) {
+    if (!(mrc_dyn->clause_sat[c])) {
+      if (mrc_dyn->unres_clause_size[c] != f.clauses[i].size()) {
+        printf("mrc_dyn->unres_clause_size[%d] = %d    !=    f.clauses[%d].size() = %d\n", c, mrc_dyn->unres_clause_size[c], i, f.clauses[i].size());
+        exit(EXIT_FAILURE);
+      }
+      
+      i++;
+    }
+  }
+
+  printf("OK!\n");
+
+  printf("\n*** End clause sizes test ***\n\n");
+
+  printf("\n*** End correctness test ***\n\n");
+
+  printf("******************************************************************");
+  printf("\n");
+  printf("*********************    END DEBUG INFO    ***********************");
+  printf("\n");
+  printf("******************************************************************");
+  printf("\n\n");
+}
+#endif
 
 int main(int argc, char *argv[]) {
   char *prog = argv[0];   // Program name.
@@ -729,8 +811,8 @@ int main(int argc, char *argv[]) {
   Miracle *mrc = mrc_create_miracle(filename);
 
   clock_t begin = clock();
-  
-  solver.solve(mrc);       // solve
+
+  solver.solve(mrc);
 
   clock_t end = clock();
 
@@ -740,8 +822,8 @@ int main(int argc, char *argv[]) {
   Miracle_Dyn *mrc_dyn = mrc_dyn_create_miracle(filename);
 
   clock_t begin = clock();
-  
-  solver.solve(mrc_dyn);       // solve
+
+  solver.solve(mrc_dyn);
 
   clock_t end = clock();
 
@@ -756,7 +838,7 @@ int main(int argc, char *argv[]) {
 
   clock_t begin = clock();
 
-  solver.solve(d_mrc);       // solve
+  solver.solve(d_mrc);
 
   clock_t end = clock();
 
@@ -766,6 +848,5 @@ int main(int argc, char *argv[]) {
   double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
   time_spent *= 1000;
   printf("Time to solve: %3.1f ms\n", time_spent);
-
   return 0;
 }
