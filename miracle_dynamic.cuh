@@ -197,6 +197,19 @@ Lit mrc_dyn_JW_TS_heuristic(Miracle_Dyn *mrc_dyn);
 
 
 /**
+ * @brief Computes the BOHM heuristic.
+ *
+ * @param [in]mrc_dyn A dynamic miracle.
+ * @param [in]alpha A constant of the BOHM weight function.
+ * @param [in]beta A constant of the BOHM weight function.
+ * @retval The branching literal.
+ */
+Lit mrc_dyn_BOHM_heuristic(Miracle_Dyn *mrc_dyn,
+                           const int alpha,
+                           const int beta);
+
+
+/**
  * @brief Computes the POSIT heuristic.
  * 
  * @param [in]mrc_dyn A dynamic miracle.
