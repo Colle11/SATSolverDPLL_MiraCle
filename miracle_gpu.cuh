@@ -95,6 +95,17 @@ Lit mrc_gpu_JW_TS_heuristic(Miracle *d_mrc);
 
 
 /**
+ * @brief Computes the BOHM heuristic on the device.
+ *
+ * @param [in]d_mrc A device miracle.
+ * @param [in]alpha A constant of the BOHM weight function.
+ * @param [in]beta A constant of the BOHM weight function.
+ * @retval The branching literal.
+ */
+Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta);
+
+
+/**
  * @brief Computes the POSIT heuristic on the device.
  * 
  * @param [in]d_mrc A device miracle.
