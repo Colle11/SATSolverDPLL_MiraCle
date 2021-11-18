@@ -144,6 +144,17 @@ Lit mrc_JW_TS_heuristic(Miracle *mrc);
 
 
 /**
+ * @brief Computes the BOHM heuristic.
+ *
+ * @param [in]mrc A miracle.
+ * @param [in]alpha A constant of the BOHM weight function.
+ * @param [in]beta A constant of the BOHM weight function.
+ * @retval The branching literal.
+ */
+Lit mrc_BOHM_heuristic(Miracle *mrc, const int alpha, const int beta);
+
+
+/**
  * @brief Computes the POSIT heuristic.
  * 
  * @param [in]mrc A miracle.
