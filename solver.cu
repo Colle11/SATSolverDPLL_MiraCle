@@ -19,6 +19,8 @@
 
 #define NUM_ARGS (1)    // Number of solver arguments.
 #define POSIT_n (3)     // Constant of the POSIT weight function.
+#define BOHM_alpha (1)  // Constant of the BOHM weight function.
+#define BOHM_beta (2)   // Constant of the BOHM weight function.
 
 // #define NO_MRC
 // #define MRC
@@ -27,6 +29,7 @@
 
 // #define JW_OS
 // #define JW_TS
+// #define BOHM
 // #define POSIT
 // #define DLIS
 // #define DLCS
@@ -47,6 +50,10 @@ static int lits_len;    // Length of lits, which is the number of assigned liter
 static Lit *lits;       // Array of assigned literals.
 static int lits_len;    // Length of lits, which is the number of assigned literals.
 #endif
+
+// DEBUG
+int num_dec;
+// END DEBUG
 
 /*
  * enum for different types of return flags defined
@@ -475,6 +482,9 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   #ifdef JW_TS
   bl = mrc_JW_TS_heuristic(mrc);
   #endif
+  #ifdef BOHM
+  bl = mrc_BOHM_heuristic(mrc, BOHM_alpha, BOHM_beta);
+  #endif
   #ifdef POSIT
   bl = mrc_POSIT_heuristic(mrc, POSIT_n);
   #endif
@@ -501,6 +511,9 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   #endif
   #ifdef JW_TS
   bl = mrc_dyn_JW_TS_heuristic(mrc_dyn);
+  #endif
+  #ifdef BOHM
+  bl = mrc_dyn_BOHM_heuristic(mrc_dyn, BOHM_alpha, BOHM_beta);
   #endif
   #ifdef POSIT
   bl = mrc_dyn_POSIT_heuristic(mrc_dyn, POSIT_n);
@@ -529,6 +542,9 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   #ifdef JW_TS
   bl = mrc_gpu_JW_TS_heuristic(d_mrc);
   #endif
+  #ifdef BOHM
+  bl = mrc_gpu_BOHM_heuristic(d_mrc, BOHM_alpha, BOHM_beta);
+  #endif
   #ifdef POSIT
   bl = mrc_gpu_POSIT_heuristic(d_mrc, POSIT_n);
   #endif
@@ -549,6 +565,9 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   pol = lit_to_pol(bl);
   i = (int)bv;
 #endif
+  // DEBUG
+  num_dec++;
+  // END DEBUG
   // need to apply twice, once true, the other false
   for (int j = 0; j < 2; j++) {
     Formula new_f = f; // copy the formula before recursing
@@ -798,6 +817,10 @@ int main(int argc, char *argv[]) {
 
   char *filename = argv[1];
 
+  // DEBUG
+  num_dec = 0;
+  // END DEBUG
+
   SATSolverDPLL solver; // create the solver
   solver.initialize(filename);  // initialize
 #ifdef NO_MRC
@@ -848,5 +871,8 @@ int main(int argc, char *argv[]) {
   double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
   time_spent *= 1000;
   printf("Time to solve: %3.1f ms\n", time_spent);
+  // DEBUG
+  printf("num_dec: %d\n", num_dec);
+  // END DEBUG
   return 0;
 }
