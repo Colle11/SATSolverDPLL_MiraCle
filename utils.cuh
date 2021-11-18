@@ -145,6 +145,16 @@ int find_min_int(int *d_data, int data_len);
 
 
 /**
+ * @brief Finds the maximum float in a device array of floats.
+ * 
+ * @param [in]d_data A device array of floats.
+ * @param [in]data_len Length of d_data.
+ * @retval The maximum float in d_data.
+ */
+float find_max_float(float *d_data, int data_len);
+
+
+/**
  * @brief Initializes or sets int device memory to a int value.
  * Fills the first count ints of the memory area pointed to by devPtr with the
  * constant int value value.
