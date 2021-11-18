@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <float.h>
 
 
 #include "utils.cuh"
@@ -94,6 +95,26 @@ __global__ void find_min_int_krn(int num_thds_per_blk,
                                  int *blk_vals,
                                  int *blk_num,
                                  int *min_int);
+
+
+/**
+ * @brief Finds the maximum float in a device array of floats.
+ * 
+ * @param [in]num_thds_per_blk A number of threads per block.
+ * @param [in]data A device array of floats.
+ * @param [in]data_len Length of data.
+ * @param [in]blk_vals A device array of the maximum values computed by each
+ * block.
+ * @param [in]blk_num A device counter to find the last block.
+ * @param [out]max_float The device maximum float in data.
+ * @retval None.
+ */
+__global__ void find_max_float_krn(int num_thds_per_blk,
+                                   float *data,
+                                   int data_len,
+                                   float *blk_vals,
+                                   int *blk_num,
+                                   float *max_float);
 
 
 /**
@@ -305,6 +326,59 @@ int find_min_int(int *d_data, int data_len) {
     gpuErrchk( cudaFree(d_min_int) );
 
     return min_int;
+}
+
+
+float find_max_float(float *d_data, int data_len) {
+    int num_blks = gpu_num_blocks(data_len);
+    int num_thds_per_blk = gpu_num_threads_per_block();
+
+    float *d_blk_vals;      /**
+                             * Device array of the maximum values computed by
+                             * each block.
+                             */
+    gpuErrchk( cudaMalloc((void**)&d_blk_vals,
+                          sizeof *d_blk_vals * num_blks) );
+
+    int *d_blk_num;         /**
+                             * Device counter to find the last block.
+                             */
+    gpuErrchk( cudaMalloc((void**)&d_blk_num,
+                          sizeof *d_blk_num) );
+    gpuErrchk( cudaMemset(d_blk_num, 0, sizeof *d_blk_num) );
+
+    float *d_max_float;       /**
+                             * Device maximum float in d_data.
+                             */
+    gpuErrchk( cudaMalloc((void**)&d_max_float,
+                          sizeof *d_max_float) );
+
+    int vals_len = num_thds_per_blk;
+    int last_blk_len = 1;
+    int shared_mem_size = (sizeof(float) * vals_len) +
+                          (sizeof(bool) * last_blk_len);
+
+    find_max_float_krn<<<num_blks, num_thds_per_blk, shared_mem_size>>>(
+                                                            num_thds_per_blk,
+                                                            d_data,
+                                                            data_len,
+                                                            d_blk_vals,
+                                                            d_blk_num,
+                                                            d_max_float
+                                                                       );
+
+    gpuErrchk( cudaPeekAtLastError() );
+
+    float max_float;
+    gpuErrchk( cudaMemcpy(&max_float, d_max_float,
+                          sizeof max_float,
+                          cudaMemcpyDeviceToHost) );
+
+    gpuErrchk( cudaFree(d_blk_vals) );
+    gpuErrchk( cudaFree(d_blk_num) );
+    gpuErrchk( cudaFree(d_max_float) );
+
+    return max_float;
 }
 
 
@@ -652,6 +726,94 @@ __global__ void find_min_int_krn(int num_thds_per_blk,
 
         if (tid == 0) {
             *min_int = vals[0];
+        }
+    }
+}
+
+
+__global__ void find_max_float_krn(int num_thds_per_blk,
+                                   float *data,
+                                   int data_len,
+                                   float *blk_vals,
+                                   int *blk_num,
+                                   float *max_float) {
+    extern __shared__ volatile float array_fmfk[];
+
+    volatile float *vals = array_fmfk;
+    volatile bool *last_blk = (bool *)(vals + num_thds_per_blk);
+
+    int tid = threadIdx.x;
+    int gid = tid + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+    *last_blk = false;
+    float val = -FLT_MAX;
+
+    // Sweep from global memory.
+    while (gid < data_len) {
+        if (data[gid] > val) {
+            val = data[gid];
+        }
+
+        gid += stride;
+    }
+
+    // Populate shared memory.
+    vals[tid] = val;
+    __syncthreads();
+
+    // Sweep in shared memory.
+    for (int s = (num_thds_per_blk >> 1); s > 0; s >>= 1) {
+        if (tid < s) {
+            if (vals[tid] < vals[tid + s]) {
+                vals[tid] = vals[tid + s];
+            }
+        }
+
+        __syncthreads();
+    }
+
+    // Perform block-level reduction.
+    if (tid == 0) {
+        blk_vals[blockIdx.x] = vals[0];
+
+        if (atomicAdd(blk_num, 1) == gridDim.x - 1) {
+            // True for the last block.
+            *last_blk = true;
+        }
+    }
+
+    __syncthreads();
+
+    if (*last_blk) {
+        val = -FLT_MAX;
+
+        while (tid < gridDim.x) {
+            if (blk_vals[tid] > val) {
+                val = blk_vals[tid];
+            }
+
+            tid += blockDim.x;
+        }
+
+        tid = threadIdx.x;
+
+        // Populate shared memory.
+        vals[tid] = val;
+        __syncthreads();
+
+        // Sweep in shared memory.
+        for (int s = (num_thds_per_blk >> 1); s > 0; s >>= 1) {
+            if (tid < s) {
+                if (vals[tid] < vals[tid + s]) {
+                    vals[tid] = vals[tid + s];
+                }
+            }
+
+            __syncthreads();
+        }
+
+        if (tid == 0) {
+            *max_float = vals[0];
         }
     }
 }
