@@ -1,5 +1,5 @@
 /**
- * driver.cu: TO-DO.
+ * driver.cu: program to test MiraCle.
  * 
  * Copyright (c) Michele Collevati
  */

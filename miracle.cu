@@ -1,5 +1,5 @@
 /**
- * miracle.cu: TO-DO.
+ * miracle.cu: definition of the Miracle API.
  * 
  * Copyright (c) Michele Collevati
  */

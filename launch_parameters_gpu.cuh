@@ -1,5 +1,5 @@
 /**
- * launch_parameters_gpu.cuh: TO-DO.
+ * launch_parameters_gpu.cuh: API definition for setting up CUDA.
  * 
  * Copyright (c) Michele Collevati
  */

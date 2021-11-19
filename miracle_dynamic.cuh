@@ -1,5 +1,6 @@
 /**
- * miracle_dynamic.cuh: TO-DO.
+ * miracle_dynamic.cuh: definition of the Miracle_Dyn data type and declaration
+ * of its API.
  * 
  * Copyright (c) Michele Collevati
  */

@@ -1,5 +1,5 @@
 /**
- * cnf_formula_types.cuh: TO-DO
+ * cnf_formula_types.cuh: definition of CNF_Formula types and their API.
  *
  * Copyright (c) Michele Collevati
  */

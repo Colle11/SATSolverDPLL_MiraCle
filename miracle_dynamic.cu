@@ -1,5 +1,5 @@
 /**
- * miracle_dynamic.cu: TO-DO.
+ * miracle_dynamic.cu: definition of the Miracle_Dyn API.
  * 
  * Copyright (c) Michele Collevati
  */

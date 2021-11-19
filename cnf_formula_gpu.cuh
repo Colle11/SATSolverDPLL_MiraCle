@@ -1,5 +1,5 @@
 /**
- * cnf_formula_gpu.cuh: TO-DO.
+ * cnf_formula_gpu.cuh: declaration of the CNF_Formula device API.
  * 
  * Copyright (c) Michele Collevati
  */

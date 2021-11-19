@@ -1,5 +1,5 @@
 /**
- * miracle_gpu.cu: TO-DO.
+ * miracle_gpu.cu: definition of the Miracle device API.
  * 
  * Copyright (c) Michele Collevati
  */
@@ -358,7 +358,8 @@ __global__ void init_clause_idxs_krn(Miracle *mrc);
 
 /**
  * @brief Counts the number of occurrences of literals in unresolved clauses
- * having the same size.
+ * having the same size (to be called before
+ * BOHM_weigh_vars_unres_clauses_same_size_krn).
  *
  * @param [in]mrc A device miracle.
  * @param [in]num_clauses_same_size The number of clauses having the same size.
@@ -375,7 +376,9 @@ __global__ void count_lits_unres_clauses_same_size_krn(
 
 /**
  * @brief Weighs the variables in unresolved clauses having the same size
- * according to the BOHM weight function.
+ * according to the BOHM weight function (to be called after
+ * count_lits_unres_clauses_same_size_krn and before
+ * BOHM_update_var_availability_krn).
  *
  * @param [in]mrc A device miracle.
  * @param [in]alpha A constant of the BOHM weight function.
@@ -389,7 +392,8 @@ __global__ void BOHM_weigh_vars_unres_clauses_same_size_krn(Miracle *mrc,
 
 /**
  * @brief Updates the variable availability according to the BOHM Variable
- * Selection Heuristic.
+ * Selection Heuristic (to be called after
+ * BOHM_weigh_vars_unres_clauses_same_size_krn).
  *
  * @param [in]greatest_v_weight The greatest variable BOHM weight.
  * @retval None.

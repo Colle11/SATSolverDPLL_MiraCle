@@ -1,5 +1,5 @@
 /**
- * utils.cuh: TO-DO.
+ * utils.cuh: API declaration for utility functions.
  * 
  * Copyright (c) Michele Collevati
  */

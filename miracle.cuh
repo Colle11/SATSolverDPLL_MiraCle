@@ -1,5 +1,5 @@
 /**
- * miracle.cuh: TO-DO.
+ * miracle.cuh: definition of the Miracle data type and declaration of its API.
  * 
  * Copyright (c) Michele Collevati
  */

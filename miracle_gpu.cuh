@@ -1,5 +1,5 @@
 /**
- * miracle_gpu.cuh: TO-DO.
+ * miracle_gpu.cuh: declaration of the Miracle device API.
  * 
  * Copyright (c) Michele Collevati
  */

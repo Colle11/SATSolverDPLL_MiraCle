@@ -1,5 +1,5 @@
 /**
- * utils.cu: TO-DO.
+ * utils.cu: API definition for utility functions.
  * 
  * Copyright (c) Michele Collevati
  */

@@ -1,5 +1,5 @@
 /**
- * cnf_formula.cu: TO-DO.
+ * cnf_formula.cu: definition of the CNF_Formula API.
  * 
  * Copyright (c) Michele Collevati
  */
