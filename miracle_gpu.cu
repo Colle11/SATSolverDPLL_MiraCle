@@ -24,105 +24,188 @@
  */
 
 
-__device__ Lit *d_lits;                 // Device array of assigned literals.
+__device__ Lit *d_lits;                 /**
+                                         * Device array of assigned literals
+                                         * (pointer on the device).
+                                         */
+static Lit *dev_lits;                   /**
+                                         * Device array of assigned literals
+                                         * (pointer on the host).
+                                         */
 __device__ int d_lits_len;              /**
-                                         * Device length of d_lits, which is
-                                         * the number of assigned literals.
+                                         * Device length of d_lits/dev_lits,
+                                         * which is the number of assigned
+                                         * literals.
                                          */
 
-__device__ int *d_lit_occ;              // Device array of literal occurrences.
+__device__ int *d_lit_occ;              /**
+                                         * Device array of literal occurrences
+                                         * (pointer on the device).
+                                         */
+static int *dev_lit_occ;                /**
+                                         * Device array of literal occurrences
+                                         * (pointer on the host).
+                                         */
 __device__ int d_lit_occ_len;           /**
-                                         * Device length of d_lit_occ, which is
+                                         * Device length of d_lit_occ/
+                                         * dev_lit_occ, which is
                                          * mrc->phi->num_vars * 2.
                                          */
 static int lit_occ_len;                 /**
-                                         * Length of d_lit_occ, which is
-                                         * mrc->phi->num_vars * 2.
+                                         * Length of d_lit_occ/dev_lit_occ,
+                                         * which is mrc->phi->num_vars * 2.
                                          */
 
 __device__ int *d_cum_lit_occ;          /**
                                          * Device array of cumulative literal
-                                         * occurrences.
+                                         * occurrences (pointer on the device).
+                                         */
+static int *dev_cum_lit_occ;            /**
+                                         * Device array of cumulative literal
+                                         * occurrences (pointer on the host).
                                          */
 __device__ int d_cum_lit_occ_len;       /**
-                                         * Device length of d_cum_lit_occ,
-                                         * which is mrc->phi->num_vars * 2.
+                                         * Device length of d_cum_lit_occ/
+                                         * dev_cum_lit_occ, which is
+                                         * mrc->phi->num_vars * 2.
                                          */
 static int cum_lit_occ_len;             /**
-                                         * Length of d_cum_lit_occ, which is
+                                         * Length of d_cum_lit_occ/
+                                         * dev_cum_lit_occ, which is
                                          * mrc->phi->num_vars * 2.
                                          */
 
-__device__ float *d_lit_weights;        // Device array of literal weights.
+__device__ float *d_lit_weights;        /**
+                                         * Device array of literal weights
+                                         * (pointer on the device).
+                                         */
+static float *dev_lit_weights;          /**
+                                         * Device array of literal weights
+                                         * (pointer on the host).
+                                         */
 __device__ int d_lit_weights_len;       /**
-                                         * Device length of d_lit_weights,
-                                         * which is mrc->phi->num_vars * 2.
+                                         * Device length of d_lit_weights/
+                                         * dev_lit_weights, which is
+                                         * mrc->phi->num_vars * 2.
                                          */
 static int lit_weights_len;             /**
-                                         * Length of d_lit_weights, which is
+                                         * Length of d_lit_weights/
+                                         * dev_lit_weights, which is
                                          * mrc->phi->num_vars * 2.
                                          */
 
 __device__ int *d_var_occ;              /**
                                          * Device array of variable
-                                         * occurrences.
+                                         * occurrences (pointer on the device).
+                                         */
+static int *dev_var_occ;                /**
+                                         * Device array of variable
+                                         * occurrences (pointer on the host).
                                          */
 __device__ int d_var_occ_len;           /**
-                                         * Device length of d_var_occ, which is
+                                         * Device length of d_var_occ/
+                                         * dev_var_occ, which is
                                          * mrc->phi->num_vars.
                                          */
 static int var_occ_len;                 /**
-                                         * Length of d_var_occ, which is
-                                         * mrc->phi->num_vars.
-                                         */
-
-__device__ float *d_var_weights;        // Device array of variable weights.
-__device__ int d_var_weights_len;       /**
-                                         * Device length of d_var_weights,
+                                         * Length of d_var_occ/dev_var_occ,
                                          * which is mrc->phi->num_vars.
                                          */
+
+__device__ float *d_var_weights;        /**
+                                         * Device array of variable weights
+                                         * (pointer on the device).
+                                         */
+static float *dev_var_weights;          /**
+                                         * Device array of variable weights
+                                         * (pointer on the host).
+                                         */
+__device__ int d_var_weights_len;       /**
+                                         * Device length of d_var_weights/
+                                         * dev_var_weights, which is
+                                         * mrc->phi->num_vars.
+                                         */
 static int var_weights_len;             /**
-                                         * Length of d_var_weights, which is
+                                         * Length of d_var_weights/
+                                         * dev_var_weights, which is
                                          * mrc->phi->num_vars.
                                          */
 
 __device__ int *d_var_availability;     /**
                                          * Device array of variable
-                                         * availability.
+                                         * availability (pointer on the
+                                         * device).
+                                         */
+static int *dev_var_availability;       /**
+                                         * Device array of variable
+                                         * availability (pointer on the host).
                                          */
 __device__ int d_var_availability_len;  /**
-                                         * Device length of d_var_availability,
-                                         * which is mrc->phi->num_vars.
+                                         * Device length of d_var_availability/
+                                         * dev_var_availability, which is
+                                         * mrc->phi->num_vars.
                                          */
 static int var_availability_len;        /**
-                                         * Length of d_var_availability, which
-                                         * is mrc->phi->num_vars.
+                                         * Length of d_var_availability/
+                                         * dev_var_availability, which is
+                                         * mrc->phi->num_vars.
                                          */
 
-__device__ int *d_clause_sizes;         // Device array of clause sizes.
-__device__ int *d_clause_sizes_copy;    // Device copy of array d_clause_sizes.
+__device__ int *d_clause_sizes;         /**
+                                         * Device array of clause sizes
+                                         * (pointer on the device).
+                                         */
+static int *dev_clause_sizes;           /**
+                                         * Device array of clause sizes
+                                         * (pointer on the host).
+                                         */
+__device__ int *d_clause_sizes_copy;    /**
+                                         * Device copy of array d_clause_sizes
+                                         * (pointer on the device).
+                                         */
+static int *dev_clause_sizes_copy;      /**
+                                         * Device copy of array d_clause_sizes
+                                         * (pointer on the host).
+                                         */
 __device__ int d_clause_sizes_len;      /**
-                                         * Device length of d_clause_sizes,
-                                         * which is mrc->phi->num_clauses.
+                                         * Device length of d_clause_sizes/
+                                         * dev_clause_sizes, which is
+                                         * mrc->phi->num_clauses.
                                          */
 static int clause_sizes_len;            /**
-                                         * Length of d_clause_sizes, which is
+                                         * Length of d_clause_sizes/
+                                         * dev_clause_sizes, which is
                                          * mrc->phi->num_clauses.
                                          */
 
-__device__ int *d_clause_idxs;          // Device array of clause indices.
+__device__ int *d_clause_idxs;          /**
+                                         * Device array of clause indices
+                                         * (pointer on the device).
+                                         */
+static int *dev_clause_idxs;            /**
+                                         * Device array of clause indices
+                                         * (pointer on the host).
+                                         */
 __device__ int d_clause_idxs_len;       /**
-                                         * Device length of d_clause_idxs,
-                                         * which is mrc->phi->num_clauses.
+                                         * Device length of d_clause_idxs/
+                                         * dev_clause_idxs, which is
+                                         * mrc->phi->num_clauses.
                                          */
 static int clause_idxs_len;             /**
-                                         * Length of d_clause_idxs, which is
+                                         * Length of d_clause_idxs/
+                                         * dev_clause_idxs, which is
                                          * mrc->phi->num_clauses.
                                          */
 
 __device__ int *d_clause_indices;       /**
                                          * Device indexing array of clauses
-                                         * ordered by size.
+                                         * ordered by size (pointer on the
+                                         * device).
+                                         */
+static int *dev_clause_indices;         /**
+                                         * Device indexing array of clauses
+                                         * ordered by size (pointer on the
+                                         * host).
                                          */
 static int *clause_indices;             /**
                                          * Indexing array of clauses ordered by
@@ -130,13 +213,14 @@ static int *clause_indices;             /**
                                          */
 __device__ int d_clause_indices_len;    /**
                                          * Device current length of
-                                         * d_clause_indices and clause_indices,
-                                         * which is the number of different
-                                         * sizes + 1.
+                                         * d_clause_indices/dev_clause_indices
+                                         * and clause_indices, which is the
+                                         * number of different sizes + 1.
                                          */
 static int clause_indices_len;          /**
-                                         * Current length of d_clause_indices
-                                         * and clause_indices, which is the
+                                         * Current length of d_clause_indices/
+                                         * dev_clause_indices and
+                                         * clause_indices, which is the
                                          * number of different sizes + 1.
                                          */
 
@@ -505,10 +589,6 @@ void mrc_gpu_assign_lits(Lit *lits, int lits_len, Miracle *d_mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_lits_len, &lits_len,
                                   sizeof lits_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    Lit *dev_lits;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lits, d_lits,
-                                    sizeof dev_lits, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemcpy(dev_lits, lits,
                           sizeof *lits * lits_len,
                           cudaMemcpyHostToDevice) );
@@ -596,18 +676,10 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
     gpuErrchk( cudaPeekAtLastError() );
 
     // Clear d_cum_lit_occ.
-    int *dev_cum_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_cum_lit_occ, d_cum_lit_occ,
-                                    sizeof dev_cum_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemset(dev_cum_lit_occ, 0,
                           sizeof *dev_cum_lit_occ * cum_lit_occ_len) );
 
     // Clear d_clause_sizes.
-    int *dev_clause_sizes;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes, d_clause_sizes,
-                                    sizeof dev_clause_sizes, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemset(dev_clause_sizes, 0,
                           sizeof *dev_clause_sizes * clause_sizes_len) );
 
@@ -627,11 +699,6 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
 
     gpuErrchk( cudaPeekAtLastError() );
 
-    int *dev_clause_idxs;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_idxs, d_clause_idxs,
-                                    sizeof dev_clause_idxs, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-
     // Sort the clauses by increasing size.
     thrust::sort_by_key(thrust::device,
                         dev_clause_sizes,
@@ -639,19 +706,9 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
                         dev_clause_idxs);
 
     // Build the indexing array of clauses ordered by size.
-    int *dev_clause_sizes_copy;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes_copy,
-                                    d_clause_sizes_copy,
-                                    sizeof dev_clause_sizes_copy, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemcpy(dev_clause_sizes_copy, dev_clause_sizes,
                           sizeof *dev_clause_sizes * clause_sizes_len,
                           cudaMemcpyDeviceToDevice) );
-
-    int *dev_clause_indices;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_indices, d_clause_indices,
-                                    sizeof dev_clause_indices, 0UL,
-                                    cudaMemcpyDeviceToHost) );
 
     thrust::sequence(thrust::device,
                      dev_clause_indices,
@@ -685,15 +742,6 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
     gpuErrchk( cudaMemcpy(&min_c_size, &(dev_clause_sizes[0]),
                           sizeof min_c_size,
                           cudaMemcpyDeviceToHost) );
-
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-    float *dev_var_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                    sizeof dev_var_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
 
     int num_clauses_same_size;      // Number of clauses having the same size.
     float greatest_v_weight;        // Greatest variable weight.
@@ -744,11 +792,6 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
         gpuErrchk( cudaPeekAtLastError() );
     }
 
-    int *dev_var_availability;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_availability, d_var_availability,
-                                    sizeof dev_var_availability, 0UL,
-                                    cudaMemcpyDeviceToHost) );
-
     Var bvar = (Var)find_min_int(dev_var_availability, var_availability_len);
     Lidx pos_lidx = varpol_to_lidx(bvar, true);
     Lidx neg_lidx = varpol_to_lidx(bvar, false);
@@ -768,10 +811,6 @@ Lit mrc_gpu_BOHM_heuristic(Miracle *d_mrc, const int alpha, const int beta) {
 
 Lit mrc_gpu_POSIT_heuristic(Miracle *d_mrc, const int n) {
     // Clear d_clause_sizes.
-    int *dev_clause_sizes;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes, d_clause_sizes,
-                                    sizeof dev_clause_sizes, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cuda_memset_int(dev_clause_sizes, INT_MAX, clause_sizes_len) );
 
     int num_blks = gpu_num_blocks(clause_sizes_len);
@@ -785,10 +824,6 @@ Lit mrc_gpu_POSIT_heuristic(Miracle *d_mrc, const int n) {
     int smallest_c_size = find_min_int(dev_clause_sizes, clause_sizes_len);
 
     // Clear d_lit_occ.
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemset(dev_lit_occ, 0,
                           sizeof *dev_lit_occ * lit_occ_len) );
 
@@ -808,10 +843,6 @@ Lit mrc_gpu_POSIT_heuristic(Miracle *d_mrc, const int n) {
     gpuErrchk( cudaPeekAtLastError() );
 
     // Clear d_var_weights.
-    float *dev_var_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                    sizeof dev_var_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
 
     num_blks = gpu_num_blocks(var_weights_len);
@@ -866,9 +897,6 @@ Lit mrc_gpu_RDLCS_heuristic(Miracle *d_mrc) {
 
 
 static void init_aux_data_structs(Miracle *mrc) {
-    int *dev_lits_len;
-    gpuErrchk( cudaGetSymbolAddress((void**)&dev_lits_len, d_lits_len) );
-    Lit *dev_lits;
     gpuErrchk( cudaMalloc((void**)&dev_lits,
                           sizeof *dev_lits * mrc->phi->num_vars) );
     gpuErrchk( cudaMemcpyToSymbol(d_lits, &dev_lits,
@@ -879,7 +907,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_lit_occ_len, &lit_occ_len,
                                   sizeof lit_occ_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_lit_occ;
     gpuErrchk( cudaMalloc((void**)&dev_lit_occ,
                           sizeof *dev_lit_occ * lit_occ_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_lit_occ, &dev_lit_occ,
@@ -890,7 +917,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_cum_lit_occ_len, &cum_lit_occ_len,
                                   sizeof cum_lit_occ_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_cum_lit_occ;
     gpuErrchk( cudaMalloc((void**)&dev_cum_lit_occ,
                           sizeof *dev_cum_lit_occ * cum_lit_occ_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_cum_lit_occ, &dev_cum_lit_occ,
@@ -901,7 +927,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_lit_weights_len, &lit_weights_len,
                                   sizeof lit_weights_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    float *dev_lit_weights;
     gpuErrchk( cudaMalloc((void**)&dev_lit_weights,
                           sizeof *dev_lit_weights * lit_weights_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_lit_weights, &dev_lit_weights,
@@ -912,7 +937,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_var_occ_len, &var_occ_len,
                                   sizeof var_occ_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_var_occ;
     gpuErrchk( cudaMalloc((void**)&dev_var_occ,
                           sizeof *dev_var_occ * var_occ_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_var_occ, &dev_var_occ,
@@ -923,7 +947,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_var_weights_len, &var_weights_len,
                                   sizeof var_weights_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    float *dev_var_weights;
     gpuErrchk( cudaMalloc((void**)&dev_var_weights,
                           sizeof *dev_var_weights * var_weights_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_var_weights, &dev_var_weights,
@@ -935,7 +958,6 @@ static void init_aux_data_structs(Miracle *mrc) {
                                   &var_availability_len,
                                   sizeof var_availability_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_var_availability;
     gpuErrchk( cudaMalloc((void**)&dev_var_availability,
                           sizeof *dev_var_availability *
                           var_availability_len) );
@@ -947,13 +969,11 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_clause_sizes_len, &clause_sizes_len,
                                   sizeof clause_sizes_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_clause_sizes;
     gpuErrchk( cudaMalloc((void**)&dev_clause_sizes,
                           sizeof *dev_clause_sizes * clause_sizes_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_clause_sizes, &dev_clause_sizes,
                                   sizeof dev_clause_sizes, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_clause_sizes_copy;
     gpuErrchk( cudaMalloc((void**)&dev_clause_sizes_copy,
                           sizeof *dev_clause_sizes_copy * clause_sizes_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_clause_sizes_copy, &dev_clause_sizes_copy,
@@ -964,7 +984,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_clause_idxs_len, &clause_idxs_len,
                                   sizeof clause_idxs_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_clause_idxs;
     gpuErrchk( cudaMalloc((void**)&dev_clause_idxs,
                           sizeof *dev_clause_idxs * clause_idxs_len) );
     gpuErrchk( cudaMemcpyToSymbol(d_clause_idxs, &dev_clause_idxs,
@@ -975,7 +994,6 @@ static void init_aux_data_structs(Miracle *mrc) {
     gpuErrchk( cudaMemcpyToSymbol(d_clause_indices_len, &clause_indices_len,
                                   sizeof clause_indices_len, 0UL,
                                   cudaMemcpyHostToDevice) );
-    int *dev_clause_indices;
     gpuErrchk( cudaMalloc((void**)&dev_clause_indices,
                           sizeof *dev_clause_indices *
                           (clause_sizes_len + 1)) );
@@ -988,70 +1006,25 @@ static void init_aux_data_structs(Miracle *mrc) {
 
 
 static void destroy_aux_data_structs() {
-    Lit *dev_lits;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lits, d_lits,
-                                    sizeof dev_lits, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_lits) );
 
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_lit_occ) );
 
-    int *dev_cum_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_cum_lit_occ, d_cum_lit_occ,
-                                    sizeof dev_cum_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_cum_lit_occ) );
 
-    float *dev_lit_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_weights, d_lit_weights,
-                                    sizeof dev_lit_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_lit_weights) );
 
-    int *dev_var_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_occ, d_var_occ,
-                                    sizeof dev_var_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_var_occ) );
 
-    float *dev_var_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                    sizeof dev_var_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_var_weights) );
 
-    int *dev_var_availability;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_var_availability, d_var_availability,
-                                    sizeof dev_var_availability, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_var_availability) );
 
-    int *dev_clause_sizes;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes, d_clause_sizes,
-                                    sizeof dev_clause_sizes, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_clause_sizes) );
-    int *dev_clause_sizes_copy;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_sizes_copy,
-                                    d_clause_sizes_copy,
-                                    sizeof dev_clause_sizes_copy, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_clause_sizes_copy) );
 
-    int *dev_clause_idxs;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_idxs, d_clause_idxs,
-                                    sizeof dev_clause_idxs, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_clause_idxs) );
 
-    int *dev_clause_indices;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_clause_indices, d_clause_indices,
-                                    sizeof dev_clause_indices, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaFree(dev_clause_indices) );
     free(clause_indices);
 }
@@ -1059,10 +1032,6 @@ static void destroy_aux_data_structs() {
 
 static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided) {
     // Clear d_lit_weights.
-    float *dev_lit_weights;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_weights, d_lit_weights,
-                                    sizeof dev_lit_weights, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemset(dev_lit_weights, 0,
                           sizeof *dev_lit_weights * lit_weights_len) );
 
@@ -1082,10 +1051,6 @@ static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided) {
 
     if (two_sided) {
         // Clear d_var_weights.
-        float *dev_var_weights;
-        gpuErrchk( cudaMemcpyFromSymbol(&dev_var_weights, d_var_weights,
-                                        sizeof dev_var_weights, 0UL,
-                                        cudaMemcpyDeviceToHost) );
         gpuErrchk( cuda_memset_float(dev_var_weights, -1.0, var_weights_len) );
 
         int num_blks = gpu_num_blocks(var_weights_len);
@@ -1119,10 +1084,6 @@ static Lit JW_xS_heuristic(Miracle *d_mrc, bool two_sided) {
 
 static Lit DLxS_heuristic(Miracle *d_mrc, bool dlcs) {
     // Clear d_lit_occ.
-    int *dev_lit_occ;
-    gpuErrchk( cudaMemcpyFromSymbol(&dev_lit_occ, d_lit_occ,
-                                    sizeof dev_lit_occ, 0UL,
-                                    cudaMemcpyDeviceToHost) );
     gpuErrchk( cudaMemset(dev_lit_occ, 0,
                           sizeof *dev_lit_occ * lit_occ_len) );
 
@@ -1142,10 +1103,6 @@ static Lit DLxS_heuristic(Miracle *d_mrc, bool dlcs) {
 
     if (dlcs) {
         // Clear d_var_occ.
-        int *dev_var_occ;
-        gpuErrchk( cudaMemcpyFromSymbol(&dev_var_occ, d_var_occ,
-                                        sizeof dev_var_occ, 0UL,
-                                        cudaMemcpyDeviceToHost) );
         gpuErrchk( cuda_memset_int(dev_var_occ, -1, var_occ_len) );
 
         int num_blks = gpu_num_blocks(var_occ_len);
