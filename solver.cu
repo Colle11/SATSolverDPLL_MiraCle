@@ -10,12 +10,21 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <time.h>
+#include <float.h>
+#include <math.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
 
 #include "launch_parameters_gpu.cuh"
 #include "utils.cuh"
 #include "miracle.cuh"
 #include "miracle_dynamic.cuh"
 #include "miracle_gpu.cuh"
+#include "sig_handling.h"
 
 #define NUM_ARGS (1)    // Number of solver arguments.
 #define POSIT_n (3)     // Constant of the POSIT weight function.
@@ -36,6 +45,8 @@
 // #define RDLIS
 // #define RDLCS
 
+// #define STATS
+
 using namespace std;
 
 #ifdef MRC
@@ -51,9 +62,23 @@ static Lit *lits;       // Array of assigned literals.
 static int lits_len;    // Length of lits, which is the number of assigned literals.
 #endif
 
-// DEBUG
-int num_dec;
-// END DEBUG
+#ifdef STATS
+clock_t solve_tic;                     // Solving time in clock.
+clock_t solve_toc;                     // Solving time out clock.
+clock_t heur_tic;                      // Heuristic time in clock.
+clock_t heur_toc;                      // Heuristic time out clock.
+double solving_time;                   // Solving time.
+static double heur_time;               // Heuristic time.
+double max_heuristic_time;             // Maximum heuristic computation time.
+double min_heuristic_time;             // Minimum heuristic computation time.
+double avg_heuristic_time;             // Average heuristic computation time.
+double tot_heuristic_time;             // Total heuristic computation time.
+int num_heur;                          // Number of heuristic calls.
+int timeout_expired;                   // Flag for timeout expiration.
+int escape;                            // Flag for SIGINT.
+static int timeout;                    // In s.
+#endif
+
 
 /*
  * enum for different types of return flags defined
@@ -157,6 +182,14 @@ public:
 #ifdef MRC_DYN
   void print_debug_info(Formula &f, Miracle_Dyn *mrc_dyn);
 #endif
+#ifdef STATS
+  void print_stats(double solving_time,
+                   double max_heuristic_time,
+                   double min_heuristic_time,
+                   double avg_heuristic_time,
+                   double tot_heuristic_time,
+                   int num_heur);
+#endif
 };
 
 /*
@@ -235,6 +268,21 @@ void SATSolverDPLL::initialize(char *filename) {
 #ifdef MRC_GPU
   lits = (Lit *)malloc(sizeof *lits * literal_count);
   lits_len = 0;
+#endif
+#ifdef STATS
+  max_heuristic_time = -DBL_MAX;
+  min_heuristic_time = DBL_MAX;
+  tot_heuristic_time = 0;
+  num_heur = 0;
+  timeout_expired = 0;
+  escape = 0;
+  timeout = 120;
+
+  // Set SIGINT handler.
+  install_handler();
+
+  // Set SIGALRM handler.
+  install_alarmhandler();
 #endif
 }
 
@@ -471,11 +519,20 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   // assigned a value already assigned variables have this field reset to -1 in
   // order to ignore them
 #ifdef NO_MRC
+#ifdef STATS
+  heur_tic = clock();
+#endif
   int i = distance(
       f.literal_frequency.begin(),
       max_element(f.literal_frequency.begin(), f.literal_frequency.end()));
+#ifdef STATS
+  heur_toc = clock();
+#endif
 #endif
 #ifdef MRC
+#ifdef STATS
+  heur_tic = clock();
+#endif
   #ifdef JW_OS
   bl = mrc_JW_OS_heuristic(mrc);
   #endif
@@ -504,8 +561,14 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   bv = lit_to_var(bl);
   pol = lit_to_pol(bl);
   i = (int)bv;
+#ifdef STATS
+  heur_toc = clock();
+#endif
 #endif
 #ifdef MRC_DYN
+#ifdef STATS
+  heur_tic = clock();
+#endif
   #ifdef JW_OS
   bl = mrc_dyn_JW_OS_heuristic(mrc_dyn);
   #endif
@@ -534,8 +597,14 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   bv = lit_to_var(bl);
   pol = lit_to_pol(bl);
   i = (int)bv;
+#ifdef STATS
+  heur_toc = clock();
+#endif
 #endif
 #ifdef MRC_GPU
+#ifdef STATS
+  heur_tic = clock();
+#endif
   #ifdef JW_OS
   bl = mrc_gpu_JW_OS_heuristic(d_mrc);
   #endif
@@ -564,10 +633,25 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
   bv = lit_to_var(bl);
   pol = lit_to_pol(bl);
   i = (int)bv;
+#ifdef STATS
+  heur_toc = clock();
 #endif
-  // DEBUG
-  num_dec++;
-  // END DEBUG
+#endif
+#ifdef STATS
+  num_heur++;
+  heur_time = ((double)(heur_toc - heur_tic)) / CLOCKS_PER_SEC;    // In s.
+  heur_time *= 1000;   // In ms.
+
+  tot_heuristic_time += heur_time;
+
+  if (heur_time > max_heuristic_time) {
+    max_heuristic_time = heur_time;
+  }
+
+  if (heur_time < min_heuristic_time) {
+    min_heuristic_time = heur_time;
+  }
+#endif
   // need to apply twice, once true, the other false
   for (int j = 0; j < 2; j++) {
     Formula new_f = f; // copy the formula before recursing
@@ -807,6 +891,43 @@ void SATSolverDPLL::print_debug_info(Formula &f, Miracle_Dyn *mrc_dyn) {
 }
 #endif
 
+/*
+ * function to print solving statistics
+ */
+#ifdef STATS
+void SATSolverDPLL::print_stats(double solving_time,
+                                double max_heuristic_time,
+                                double min_heuristic_time,
+                                double avg_heuristic_time,
+                                double tot_heuristic_time,
+                                int num_heur) {
+  printf("******************************************************************");
+  printf("\n");
+  printf("*************************    STATS    ****************************");
+  printf("\n");
+  printf("******************************************************************");
+  printf("\n\n");
+
+  printf("Solving time: %f ms\n", solving_time);
+  printf("Maximum heuristic computation time: %f ms\n", max_heuristic_time);
+  printf("Minimum heuristic computation time: %f ms\n", min_heuristic_time);
+  avg_heuristic_time = tot_heuristic_time / num_heur;
+  printf("Average heuristic computation time: %f ms\n", avg_heuristic_time);
+  printf("Total heuristic computation time: %f ms\n", tot_heuristic_time);
+  printf("%% of the solving time used in the heuristic computation: %f %%\n",
+         (tot_heuristic_time * 100) / solving_time);
+  printf("Number of heuristic calls: %d\n", num_heur);
+  
+  printf("\n");
+  printf("******************************************************************");
+  printf("\n");
+  printf("***********************    END STATS    **************************");
+  printf("\n");
+  printf("******************************************************************");
+  printf("\n\n");
+}
+#endif
+
 int main(int argc, char *argv[]) {
   char *prog = argv[0];   // Program name.
 
@@ -817,39 +938,40 @@ int main(int argc, char *argv[]) {
 
   char *filename = argv[1];
 
-  // DEBUG
-  num_dec = 0;
-  // END DEBUG
-
   SATSolverDPLL solver; // create the solver
   solver.initialize(filename);  // initialize
 #ifdef NO_MRC
-  clock_t begin = clock();
-
+#ifdef STATS
+  alarm(timeout);
+  solve_tic = clock();
+#endif
   solver.solve();       // solve
-
-  clock_t end = clock();
+#ifdef STATS
+  solve_toc = clock();
+#endif
 #endif
 #ifdef MRC
   Miracle *mrc = mrc_create_miracle(filename);
-
-  clock_t begin = clock();
-
+#ifdef STATS
+  alarm(timeout);
+  solve_tic = clock();
+#endif
   solver.solve(mrc);
-
-  clock_t end = clock();
-
+#ifdef STATS
+  solve_toc = clock();
+#endif
   mrc_destroy_miracle(mrc);
 #endif
 #ifdef MRC_DYN
   Miracle_Dyn *mrc_dyn = mrc_dyn_create_miracle(filename);
-
-  clock_t begin = clock();
-
+#ifdef STATS
+  alarm(timeout);
+  solve_tic = clock();
+#endif
   solver.solve(mrc_dyn);
-
-  clock_t end = clock();
-
+#ifdef STATS
+  solve_toc = clock();
+#endif
   mrc_dyn_destroy_miracle(mrc_dyn);
 #endif
 #ifdef MRC_GPU
@@ -858,21 +980,27 @@ int main(int argc, char *argv[]) {
 
   Miracle *mrc = mrc_create_miracle(filename);
   Miracle *d_mrc = mrc_gpu_transfer_miracle_host_to_dev(mrc);
-
-  clock_t begin = clock();
-
+#ifdef STATS
+  alarm(timeout);
+  solve_tic = clock();
+#endif
   solver.solve(d_mrc);
-
-  clock_t end = clock();
-
+#ifdef STATS
+  solve_toc = clock();
+#endif
   mrc_destroy_miracle(mrc);
   mrc_gpu_destroy_miracle(d_mrc);
 #endif
-  double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-  time_spent *= 1000;
-  printf("Time to solve: %3.1f ms\n", time_spent);
-  // DEBUG
-  printf("num_dec: %d\n", num_dec);
-  // END DEBUG
+#ifdef STATS
+  solving_time = ((double)(solve_toc - solve_tic)) / CLOCKS_PER_SEC;    // In s.
+  solving_time *= 1000;   // In ms.
+
+  solver.print_stats(solving_time,
+                     max_heuristic_time,
+                     min_heuristic_time,
+                     avg_heuristic_time,
+                     tot_heuristic_time,
+                     num_heur);
+#endif
   return 0;
 }
