@@ -19,12 +19,19 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#include "launch_parameters_gpu.cuh"
 #include "utils.cuh"
-#include "miracle.cuh"
-#include "miracle_dynamic.cuh"
-#include "miracle_gpu.cuh"
 #include "sig_handling.h"
+#ifdef MRC
+#include "miracle.cuh"
+#endif
+#ifdef MRC_DYN
+#include "miracle_dynamic.cuh"
+#endif
+#ifdef MRC_GPU
+#include "miracle.cuh"
+#include "miracle_gpu.cuh"
+#include "launch_parameters_gpu.cuh"
+#endif
 
 #define NUM_ARGS (1)    // Number of solver arguments.
 #define POSIT_n (3)     // Constant of the POSIT weight function.
