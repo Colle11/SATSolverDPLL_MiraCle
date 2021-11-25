@@ -1,4 +1,5 @@
 
+#ifdef STATS
 #ifndef FLAGLOADSIGHANDLER_H
 #include <signal.h>
 #include <sys/wait.h>
@@ -113,4 +114,5 @@ void print_stats() {
 
 
 #define FLAGLOADSIGHANDLER_H 1
+#endif
 #endif
