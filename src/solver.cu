@@ -283,7 +283,7 @@ void SATSolverDPLL::initialize(char *filename) {
   num_heur = 0;
   timeout_expired = 0;
   escape = 0;
-  timeout = 120;
+  timeout = 900;   // In s.
 
   // Set SIGINT handler.
   install_handler();
