@@ -14,7 +14,15 @@
 #include "utils.cuh"
 
 
+// #define CHECK_VARS_IN_CLAUSE
+
+
 #define AVG_NUM_LITS_IN_CLAUSE (3)    // Average number of literals in a clause.
+
+
+#ifdef CHECK_VARS_IN_CLAUSE
+bool repeated_var_in_clause = false;
+#endif
 
 
 /**
@@ -140,6 +148,16 @@ CNF_Formula *cnf_parse_DIMACS(char *filename) {
         exit(EXIT_FAILURE);
     }
 
+#ifdef CHECK_VARS_IN_CLAUSE
+    if (repeated_var_in_clause) {
+        fprintf(stderr, "Found repeated variables in the clauses of the "
+                "DIMACS CNF file \"%s\".\n", filename);
+        exit(EXIT_FAILURE);
+    } else {
+        // exit(EXIT_SUCCESS);
+    }
+#endif
+
     return phi;
 }
 
@@ -230,6 +248,10 @@ static void parse_clause_line(FILE *fp,
     Var var = 0;
     int c = fgetc(fp);
 
+#ifdef CHECK_VARS_IN_CLAUSE
+    int num_lits_in_clause = 0;
+#endif
+
     while (c != '0') {
         if (c == '-') {
             polarity = false;
@@ -244,6 +266,20 @@ static void parse_clause_line(FILE *fp,
             var += c - '0';
             c = fgetc(fp);
         }
+
+#ifdef CHECK_VARS_IN_CLAUSE
+        for (int l = 1; l <= num_lits_in_clause; l++) {
+            if (var - 1 == lidx_to_var(phi->clauses[phi->num_lits - l])) {
+                fprintf(stderr,
+                        "Clause: %d\tVar: %d\n",
+                        phi->num_clauses,
+                        var);
+                repeated_var_in_clause = true;
+            }
+        }
+
+        num_lits_in_clause++;
+#endif
 
         phi->num_vars = max(phi->num_vars, var);
 
