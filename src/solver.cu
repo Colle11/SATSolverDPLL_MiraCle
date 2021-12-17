@@ -19,11 +19,17 @@
 #include <unistd.h>
 #include <stdio.h>
 
+/**
+ * Parameters
+ */
+
+// Specify how to compute the heuristic.
 // #define NO_MRC
 // #define MRC
 // #define MRC_DYN
 // #define MRC_GPU
 
+// Specify the heuristic.
 // #define JW_OS
 // #define JW_TS
 // #define BOHM
@@ -33,7 +39,26 @@
 // #define RDLIS
 // #define RDLCS
 
+// Enable statistics.
 // #define STATS
+
+#ifdef MRC_GPU
+#define NUM_THREADS_PER_BLOCK (512)
+#endif
+#ifdef POSIT
+#define POSIT_N (8)
+#endif
+#ifdef BOHM
+#define BOHM_ALPHA (1)
+#define BOHM_BETA (2)
+#endif
+#ifdef STATS
+#define TIMEOUT (1800)    // In s.
+#endif
+
+/**
+ * End parameters
+ */
 
 #include "utils.cuh"
 #include "sig_handling.h"
@@ -49,19 +74,19 @@
 #include "launch_parameters_gpu.cuh"
 #endif
 
-#define NUM_ARGS (1)                    // Number of solver arguments.
+#define NUM_ARGS (1)          // Number of solver arguments.
 
 #ifdef MRC_GPU
-const int num_threads_per_block = 512;  // Number of threads per block.
+int num_threads_per_block;    // Number of threads per block.
 #endif
 
 #ifdef POSIT
-const int POSIT_n = 3;                  // Constant of the POSIT weight function.
+int POSIT_n;                  // Constant of the POSIT weight function.
 #endif
 
 #ifdef BOHM
-const int BOHM_alpha = 1;               // Constant of the BOHM weight function.
-const int BOHM_beta = 2;                // Constant of the BOHM weight function.
+int BOHM_alpha;               // Constant of the BOHM weight function.
+int BOHM_beta;                // Constant of the BOHM weight function.
 #endif
 
 using namespace std;
@@ -302,6 +327,16 @@ void SATSolverDPLL::initialize(char *filename) {
     }
   }
 
+#ifdef MRC_GPU
+num_threads_per_block = NUM_THREADS_PER_BLOCK;
+#endif
+#ifdef POSIT
+POSIT_n = POSIT_N;
+#endif
+#ifdef BOHM
+BOHM_alpha = BOHM_ALPHA;
+BOHM_beta = BOHM_BETA;
+#endif
 #ifdef MRC
   lits = (Lit *)malloc(sizeof *lits * literal_count);
   lits_len = 0;
@@ -341,7 +376,7 @@ void SATSolverDPLL::initialize(char *filename) {
 
   timeout_expired = 0;
   escape = 0;
-  timeout = 1200;   // In s.
+  timeout = TIMEOUT;   // In s.
 
   // Set SIGINT handler.
   install_handler();
