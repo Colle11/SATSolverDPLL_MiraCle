@@ -13,12 +13,12 @@
 #endif
 
 #ifdef POSIT
-extern const int POSIT_n;
+extern int POSIT_n;
 #endif
 
 #ifdef BOHM
-extern const int BOHM_alpha;
-extern const int BOHM_beta;
+extern int BOHM_alpha;
+extern int BOHM_beta;
 #endif
 
 extern clock_t solve_tic;
