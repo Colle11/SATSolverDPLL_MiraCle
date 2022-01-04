@@ -665,6 +665,13 @@ int SATSolverDPLL::DPLL(Formula f, Miracle *d_mrc, Lit blit) {
 
   int result = unit_propagate(f, d_mrc, blit);
 #endif
+
+#ifdef STATS
+  if (timeout_expired || escape) {
+    exit(EXIT_SUCCESS);
+  }
+#endif
+
   if (result == Cat::satisfied) // if formula satisfied, show result and return
   {
     show_result(f, result);

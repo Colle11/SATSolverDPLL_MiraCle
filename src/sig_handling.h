@@ -101,7 +101,7 @@ void my_catchint(int signo) {
 
     print_stats();
 
-    exit(2);
+    // exit(2);
 	}
 }
 
@@ -117,7 +117,7 @@ void my_catchalarm(int signo) {
 
     print_stats();
 
-		exit(2);
+		// exit(2);
 	}
 }
 
