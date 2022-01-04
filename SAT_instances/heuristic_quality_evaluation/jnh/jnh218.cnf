@@ -14,7 +14,7 @@ c
 c
 c NOTE: Satisfiable
 c
-p cnf 100 800
+p cnf 100 799
   -2   26  -33  0
  -58  -71   93  0
  -15   17  -18  0
