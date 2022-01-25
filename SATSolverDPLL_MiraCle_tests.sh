@@ -16,7 +16,7 @@ done
 
 for i in ./SAT_instances/*/*/*.cnf
 do
-    n=$(echo "${i}" | cut -d'/' -f 3- | cut -d'.' -f 1)
+    n=$(echo "${i}" | cut -d'/' -f 3-)
     ### NO_MRC ###
     ./build/bin/SATSolverDPLL_NO_MRC_STATS ${i} > "./SATSolverDPLL_MiraCle_test_results/${n}_NO_MRC_STATS.txt"
     echo "./build/bin/SATSolverDPLL_NO_MRC_STATS ${i}"
