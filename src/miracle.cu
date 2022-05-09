@@ -14,6 +14,7 @@
 
 
 #include "miracle.cuh"
+#include "sat_miracle.cuh"
 #include "utils.cuh"
 
 
@@ -114,33 +115,33 @@ static void destroy_aux_data_structs();
  * @brief If two_sided = true, computes the JW-TS heuristic,
  * otherwise computes the JW-OS heuristic.
  * 
- * @param [in]mrc A miracle.
+ * @param [in]sat_mrc A sat_miracle.
  * @param [in]two_sided A flag to choose JW-TS or JW-OS.
  * @retval The branching literal.
  */
-static Lit JW_xS_heuristic(Miracle *mrc, bool two_sided);
+static Lit JW_xS_heuristic(sat_miracle *sat_mrc, bool two_sided);
 
 
 /**
  * @brief If dlcs = true, computes the DLCS heuristic,
  * otherwise computes the DLIS heuristic.
  * 
- * @param [in]mrc A miracle.
+ * @param [in]sat_mrc A sat_miracle.
  * @param [in]dlcs A flag to choose DLCS or DLIS.
  * @retval The branching literal.
  */
-static Lit DLxS_heuristic(Miracle *mrc, bool dlcs);
+static Lit DLxS_heuristic(sat_miracle *sat_mrc, bool dlcs);
 
 
 /**
  * @brief If rdlcs = true, computes the RDLCS heuristic,
  * otherwise computes the RDLIS heuristic.
  * 
- * @param [in]mrc A miracle.
+ * @param [in]sat_mrc A sat_miracle.
  * @param [in]rdlcs A flag to choose RDLCS or RDLIS.
  * @retval The branching literal.
  */
-static Lit RDLxS_heuristic(Miracle *mrc, bool rdlcs);
+static Lit RDLxS_heuristic(sat_miracle *sat_mrc, bool rdlcs);
 
 
 /**
@@ -164,13 +165,15 @@ Miracle *mrc_create_miracle(char *filename) {
 
     mrc->phi = cnf_parse_DIMACS(filename);
 
+    CNF_Formula *phi = mrc->phi;
+
     mrc->dec_lvl = 1;
 
-    mrc->var_ass_len = mrc->phi->num_vars;
+    mrc->var_ass_len = phi->num_vars;
     mrc->var_ass = (int *)calloc(mrc->var_ass_len,
                                  sizeof *(mrc->var_ass));
 
-    mrc->clause_sat_len = mrc->phi->num_clauses;
+    mrc->clause_sat_len = phi->num_clauses;
     mrc->clause_sat = (int *)calloc(mrc->clause_sat_len,
                                     sizeof *(mrc->clause_sat));
 
@@ -197,14 +200,18 @@ void mrc_print_miracle(Miracle *mrc) {
     printf("Decision level: %d\n", mrc->dec_lvl);
 
     printf("Variable assignments: ");
-    for (int v = 0; v < mrc->var_ass_len; v++) {
-        printf("[%d]%d ", v, mrc->var_ass[v]);
+    int var_ass_len = mrc->var_ass_len;
+    int *var_ass = mrc->var_ass;
+    for (int v = 0; v < var_ass_len; v++) {
+        printf("[%d]%d ", v, var_ass[v]);
     }
     printf("\n");
 
     printf("Clause satisfiability: ");
-    for (int c = 0; c < mrc->clause_sat_len; c++) {
-        printf("[%d]%d ", c, mrc->clause_sat[c]);
+    int clause_sat_len = mrc->clause_sat_len;
+    int *clause_sat = mrc->clause_sat;
+    for (int c = 0; c < clause_sat_len; c++) {
+        printf("[%d]%d ", c, clause_sat[c]);
     }
     printf("\n");
 
@@ -212,10 +219,14 @@ void mrc_print_miracle(Miracle *mrc) {
 }
 
 
-void mrc_assign_lits(Lit *lits, int lits_len, Miracle *mrc) {
+void mrc_assign_lits(Lit *lits, int lits_len, sat_miracle *sat_mrc) {
+    Miracle *mrc = sat_mrc->mrc;
+
     Lit lit;
     Var var;
     bool pol;
+    int *var_ass = mrc->var_ass;
+    int dec_lvl = mrc->dec_lvl;
     
     // Update variable assignments.
     for (int l = 0; l < lits_len; l++) {
@@ -223,24 +234,30 @@ void mrc_assign_lits(Lit *lits, int lits_len, Miracle *mrc) {
         var = lit_to_var(lit);
         pol = lit_to_pol(lit);
 
-        mrc->var_ass[var] = pol ? mrc->dec_lvl : -(mrc->dec_lvl);
+        var_ass[var] = pol ? dec_lvl : -dec_lvl;
     }
 
     Lidx lidx;
+    int clause_sat_len = mrc->clause_sat_len;
+    int *clause_sat = mrc->clause_sat;
+    CNF_Formula *phi = mrc->phi;
+    int *phi_clause_indices = phi->clause_indices;
+    Lidx *phi_clauses = phi->clauses;
+    int v_ass;
 
     // Update clause satisfiability.
-    for (int c = 0; c < mrc->clause_sat_len; c++) {
-        if (!(mrc->clause_sat[c])) {
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+    for (int c = 0; c < clause_sat_len; c++) {
+        if (!(clause_sat[c])) {
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
                 pol = lidx_to_pol(lidx);
+                v_ass = var_ass[var];
                 
-                if ((pol && mrc->var_ass[var] > 0) ||
-                    (!pol && mrc->var_ass[var] < 0)) {
-                    mrc->clause_sat[c] = mrc->dec_lvl;
+                if ((pol && v_ass > 0) || (!pol && v_ass < 0)) {
+                    clause_sat[c] = dec_lvl;
                     break;
                 }
             }
@@ -249,18 +266,30 @@ void mrc_assign_lits(Lit *lits, int lits_len, Miracle *mrc) {
 }
 
 
-void mrc_backjump(int bj_dec_lvl, Miracle *mrc) {
+void mrc_increase_decision_level(sat_miracle *sat_mrc) {
+    sat_mrc->mrc->dec_lvl++;
+}
+
+
+void mrc_backjump(int bj_dec_lvl, sat_miracle *sat_mrc) {
+    Miracle *mrc = sat_mrc->mrc;
+    int clause_sat_len = mrc->clause_sat_len;
+    int *clause_sat = mrc->clause_sat;
+
     // Restore clause satisfiability.
-    for (int c = 0; c < mrc->clause_sat_len; c++) {
-        if (mrc->clause_sat[c] > bj_dec_lvl) {
-            mrc->clause_sat[c] = 0;
+    for (int c = 0; c < clause_sat_len; c++) {
+        if (clause_sat[c] > bj_dec_lvl) {
+            clause_sat[c] = 0;
         }
     }
 
+    int var_ass_len = mrc->var_ass_len;
+    int *var_ass = mrc->var_ass;
+
     // Restore variable assignments.
-    for (int v = 0; v < mrc->var_ass_len; v++) {
-        if (abs(mrc->var_ass[v]) > bj_dec_lvl) {
-            mrc->var_ass[v] = 0;
+    for (int v = 0; v < var_ass_len; v++) {
+        if (abs(var_ass[v]) > bj_dec_lvl) {
+            var_ass[v] = 0;
         }
     }
 
@@ -269,14 +298,18 @@ void mrc_backjump(int bj_dec_lvl, Miracle *mrc) {
 }
 
 
-Lit mrc_RAND_heuristic(Miracle *mrc) {
+Lit mrc_RAND_heuristic(sat_miracle *sat_mrc) {
+    Miracle *mrc = sat_mrc->mrc;
+
     init_PRNG();
 
     int num_unass_vars = 0;
     Var bvar = UNDEF_VAR;
+    int num_vars = mrc->phi->num_vars;
+    int *var_ass = mrc->var_ass;
 
-    for (Var v = 0; v < mrc->phi->num_vars; v++) {
-        if (!(mrc->var_ass[v])) {
+    for (Var v = 0; v < num_vars; v++) {
+        if (!(var_ass[v])) {
             // Variable Selection Heuristic.
             num_unass_vars++;
 
@@ -299,20 +332,23 @@ Lit mrc_RAND_heuristic(Miracle *mrc) {
 }
 
 
-Lit mrc_JW_OS_heuristic(Miracle *mrc) {
-    return JW_xS_heuristic(mrc, false);
+Lit mrc_JW_OS_heuristic(sat_miracle *sat_mrc) {
+    return JW_xS_heuristic(sat_mrc, false);
 }
 
 
-Lit mrc_JW_TS_heuristic(Miracle *mrc) {
-    return JW_xS_heuristic(mrc, true);
+Lit mrc_JW_TS_heuristic(sat_miracle *sat_mrc) {
+    return JW_xS_heuristic(sat_mrc, true);
 }
 
 
-Lit mrc_BOHM_heuristic(Miracle *mrc, const int alpha, const int beta) {
+Lit mrc_BOHM_heuristic(sat_miracle *sat_mrc, const int alpha, const int beta) {
+    Miracle *mrc = sat_mrc->mrc;
+    int *var_ass = mrc->var_ass;
+
     // Init var_availability.
     for (Var v = 0; v < var_availability_len; v++) {
-        var_availability[v] = !((bool)mrc->var_ass[v]);
+        var_availability[v] = !((bool)var_ass[v]);
     }
 
     // Clear cum_lit_occ.
@@ -321,19 +357,23 @@ Lit mrc_BOHM_heuristic(Miracle *mrc, const int alpha, const int beta) {
     int c_size;     // Clause size.
     Lidx lidx;
     Var var;
+    int *clause_sat = mrc->clause_sat;
+    CNF_Formula *phi = mrc->phi;
+    int *phi_clause_indices = phi->clause_indices;
+    Lidx *phi_clauses = phi->clauses;
 
     // Compute the clause sizes.
     for (int c = 0; c < clauses_len; c++) {
         c_size = 0;
 
-        if (!(mrc->clause_sat[c])) {
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+        if (!(clause_sat[c])) {
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
+                if (!(var_ass[var])) {
                     c_size++;
                 }
             }
@@ -387,10 +427,10 @@ Lit mrc_BOHM_heuristic(Miracle *mrc, const int alpha, const int beta) {
              cidx++) {
             c = clauses[cidx].idx;
 
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
                 if (var_availability[var]) {
@@ -450,7 +490,9 @@ Lit mrc_BOHM_heuristic(Miracle *mrc, const int alpha, const int beta) {
 }
 
 
-Lit mrc_POSIT_heuristic(Miracle *mrc, const int n) {
+Lit mrc_POSIT_heuristic(sat_miracle *sat_mrc, const int n) {
+    Miracle *mrc = sat_mrc->mrc;
+
     // Clear clause_sizes.
     memset(clause_sizes, 0, sizeof *clause_sizes * clause_sizes_len);
 
@@ -468,21 +510,27 @@ Lit mrc_POSIT_heuristic(Miracle *mrc, const int n) {
     int weight;
     int greatest_weight = -1;
     Var bvar = UNDEF_VAR;
+    CNF_Formula *phi = mrc->phi;
+    int num_clauses = phi->num_clauses;
+    int *clause_sat = mrc->clause_sat;
+    int *phi_clause_indices = phi->clause_indices;
+    Lidx *phi_clauses = phi->clauses;
+    int *var_ass = mrc->var_ass;
 
     /**
      * Compute the clause sizes and the smallest clause size.
      */
-    for (int c = 0; c < mrc->phi->num_clauses; c++) {
-        if (!(mrc->clause_sat[c])) {
+    for (int c = 0; c < num_clauses; c++) {
+        if (!(clause_sat[c])) {
             c_size = 0;
 
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
+                if (!(var_ass[var])) {
                     c_size++;
                 }
             }
@@ -495,15 +543,17 @@ Lit mrc_POSIT_heuristic(Miracle *mrc, const int n) {
         }
     }
 
-    for (int c = 0; c < mrc->phi->num_clauses; c++) {
-        if (!(mrc->clause_sat[c]) && clause_sizes[c] == smallest_c_size) {
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+    int exp2_n = (int)(exp2f((float)n) + 0.5);
+
+    for (int c = 0; c < num_clauses; c++) {
+        if (!(clause_sat[c]) && clause_sizes[c] == smallest_c_size) {
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
+                if (!(var_ass[var])) {
                     // Variable Selection Heuristic.
                     lit_occ[lidx]++;
                     
@@ -511,8 +561,7 @@ Lit mrc_POSIT_heuristic(Miracle *mrc, const int n) {
                     neg_lidx = varpol_to_lidx(var, false);
                     lc_min_pos_lidx = lit_occ[pos_lidx];
                     lc_min_neg_lidx = lit_occ[neg_lidx];
-                    weight = lc_min_pos_lidx * lc_min_neg_lidx *
-                             (int)(pow(2, n) + 0.5) +
+                    weight = lc_min_pos_lidx * lc_min_neg_lidx * exp2_n +
                              lc_min_pos_lidx + lc_min_neg_lidx;
                     
                     if (weight > greatest_weight
@@ -547,23 +596,23 @@ Lit mrc_POSIT_heuristic(Miracle *mrc, const int n) {
 }
 
 
-Lit mrc_DLIS_heuristic(Miracle *mrc) {
-    return DLxS_heuristic(mrc, false);
+Lit mrc_DLIS_heuristic(sat_miracle *sat_mrc) {
+    return DLxS_heuristic(sat_mrc, false);
 }
 
 
-Lit mrc_DLCS_heuristic(Miracle *mrc) {
-    return DLxS_heuristic(mrc, true);
+Lit mrc_DLCS_heuristic(sat_miracle *sat_mrc) {
+    return DLxS_heuristic(sat_mrc, true);
 }
 
 
-Lit mrc_RDLIS_heuristic(Miracle *mrc) {
-    return RDLxS_heuristic(mrc, false);
+Lit mrc_RDLIS_heuristic(sat_miracle *sat_mrc) {
+    return RDLxS_heuristic(sat_mrc, false);
 }
 
 
-Lit mrc_RDLCS_heuristic(Miracle *mrc) {
-    return RDLxS_heuristic(mrc, true);
+Lit mrc_RDLCS_heuristic(sat_miracle *sat_mrc) {
+    return RDLxS_heuristic(sat_mrc, true);
 }
 
 
@@ -573,34 +622,36 @@ Lit mrc_RDLCS_heuristic(Miracle *mrc) {
 
 
 static void init_aux_data_structs(Miracle *mrc) {
-    lit_weights_len = mrc->phi->num_vars * 2;
+    CNF_Formula *phi = mrc->phi;
+
+    lit_weights_len = phi->num_vars * 2;
     lit_weights = (float *)calloc(lit_weights_len,
                                   sizeof *lit_weights);
 
-    clause_sizes_len = mrc->phi->num_clauses;
+    clause_sizes_len = phi->num_clauses;
     clause_sizes = (int *)calloc(clause_sizes_len,
                                  sizeof *clause_sizes);
 
-    clauses_len = mrc->phi->num_clauses;
+    clauses_len = phi->num_clauses;
     clauses = (Clause *)malloc(sizeof *clauses * clauses_len);
 
     clause_indices_len = 0;
     clause_indices = (int *)malloc(sizeof *clause_indices *
                                    (clauses_len + 1));
 
-    lit_occ_len = mrc->phi->num_vars * 2;
+    lit_occ_len = phi->num_vars * 2;
     lit_occ = (int *)calloc(lit_occ_len,
                             sizeof *lit_occ);
 
-    cum_lit_occ_len = mrc->phi->num_vars * 2;
+    cum_lit_occ_len = phi->num_vars * 2;
     cum_lit_occ = (int *)calloc(cum_lit_occ_len,
                                 sizeof *cum_lit_occ);
 
-    var_availability_len = mrc->phi->num_vars;
+    var_availability_len = phi->num_vars;
     var_availability = (bool *)malloc(sizeof *var_availability *
                                       var_availability_len);
 
-    var_weights_len = mrc->phi->num_vars;
+    var_weights_len = phi->num_vars;
     var_weights = (float *)calloc(var_weights_len,
                                   sizeof *var_weights);
 }
@@ -618,7 +669,9 @@ static void destroy_aux_data_structs() {
 }
 
 
-static Lit JW_xS_heuristic(Miracle *mrc, bool two_sided) {
+static Lit JW_xS_heuristic(sat_miracle *sat_mrc, bool two_sided) {
+    Miracle *mrc = sat_mrc->mrc;
+
     // Clear lit_weights.
     memset(lit_weights, 0, sizeof *lit_weights * lit_weights_len);
 
@@ -632,38 +685,48 @@ static Lit JW_xS_heuristic(Miracle *mrc, bool two_sided) {
     float weight;
     float greatest_weight = -1.0;
     Var bvar = UNDEF_VAR;
+    CNF_Formula *phi = mrc->phi;
+    int num_clauses = phi->num_clauses;
+    int *clause_sat = mrc->clause_sat;
+    int *phi_clause_indices = phi->clause_indices;
+    Lidx *phi_clauses = phi->clauses;
+    int *var_ass = mrc->var_ass;
 
     // Compute the JW weight of literals in unresolved clauses.
-    for (int c = 0; c < mrc->phi->num_clauses; c++) {
-        if (!(mrc->clause_sat[c])) {
+    for (int c = 0; c < num_clauses; c++) {
+        if (!(clause_sat[c])) {
             c_size = 0;
 
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
+                if (!(var_ass[var])) {
                     c_size++;
                 }
             }
 
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+            weight = exp2f((float)-c_size);
+
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
-                    lit_weights[lidx] += powf(2.0, (float)-c_size);
+                if (!(var_ass[var])) {
+                    lit_weights[lidx] += weight;
                 }
             }
         }
     }
 
-    for (Var v = 0; v < mrc->phi->num_vars; v++) {
-        if (!(mrc->var_ass[v])) {
+    int num_vars = phi->num_vars;
+
+    for (Var v = 0; v < num_vars; v++) {
+        if (!(var_ass[v])) {
             // Variable Selection Heuristic.
             pos_lidx = varpol_to_lidx(v, true);
             neg_lidx = varpol_to_lidx(v, false);
@@ -700,7 +763,9 @@ static Lit JW_xS_heuristic(Miracle *mrc, bool two_sided) {
 }
 
 
-static Lit DLxS_heuristic(Miracle *mrc, bool dlcs) {
+static Lit DLxS_heuristic(sat_miracle *sat_mrc, bool dlcs) {
+    Miracle *mrc = sat_mrc->mrc;
+
     // Clear lit_occ.
     memset(lit_occ, 0, sizeof *lit_occ * lit_occ_len);
 
@@ -711,16 +776,22 @@ static Lit DLxS_heuristic(Miracle *mrc, bool dlcs) {
     int sum;
     int largest_sum = -1;
     Var bvar = UNDEF_VAR;
+    CNF_Formula *phi = mrc->phi;
+    int num_clauses = phi->num_clauses;
+    int *clause_sat = mrc->clause_sat;
+    int *phi_clause_indices = phi->clause_indices;
+    Lidx *phi_clauses = phi->clauses;
+    int *var_ass = mrc->var_ass;
 
-    for (int c = 0; c < mrc->phi->num_clauses; c++) {
-        if (!(mrc->clause_sat[c])) {
-            for (int l = mrc->phi->clause_indices[c];
-                 l < mrc->phi->clause_indices[c+1];
+    for (int c = 0; c < num_clauses; c++) {
+        if (!(clause_sat[c])) {
+            for (int l = phi_clause_indices[c];
+                 l < phi_clause_indices[c+1];
                  l++) {
-                lidx = mrc->phi->clauses[l];
+                lidx = phi_clauses[l];
                 var = lidx_to_var(lidx);
 
-                if (!(mrc->var_ass[var])) {
+                if (!(var_ass[var])) {
                     // Variable Selection Heuristic.
                     lit_occ[lidx]++;
                     
@@ -761,17 +832,17 @@ static Lit DLxS_heuristic(Miracle *mrc, bool dlcs) {
 }
 
 
-static Lit RDLxS_heuristic(Miracle *mrc, bool rdlcs) {
+static Lit RDLxS_heuristic(sat_miracle *sat_mrc, bool rdlcs) {
     init_PRNG();
 
     if (rdlcs && (rand() % 2)) {
-        return neg_lit(mrc_DLCS_heuristic(mrc));
+        return neg_lit(mrc_DLCS_heuristic(sat_mrc));
     } else if (rdlcs) {
-        return mrc_DLCS_heuristic(mrc);
+        return mrc_DLCS_heuristic(sat_mrc);
     } else if (rand() % 2) {
-        return neg_lit(mrc_DLIS_heuristic(mrc));
+        return neg_lit(mrc_DLIS_heuristic(sat_mrc));
     } else {
-        return mrc_DLIS_heuristic(mrc);
+        return mrc_DLIS_heuristic(sat_mrc);
     }
 }
 
